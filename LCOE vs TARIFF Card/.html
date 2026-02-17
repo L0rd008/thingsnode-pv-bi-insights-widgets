@@ -1,0 +1,69 @@
+<div class="lcoe-card">
+
+    <!-- ═══ HEADER ═══ -->
+    <div class="card-header">
+        <div class="card-title js-title">LCOE VS TARIFF COMPARISON</div>
+        <div class="header-status">
+            <span class="status-dot js-status-dot"></span>
+            <span class="status-text js-status-text">--</span>
+        </div>
+    </div>
+
+    <!-- ═══ BODY — Comparison Bars ═══ -->
+    <div class="card-body">
+
+        <!-- LCOE Row -->
+        <div class="metric-row">
+            <div class="metric-label">
+                <span class="label-main">LCOE</span>
+                <span class="label-sub js-sub-lcoe">(Levelized Cost)</span>
+            </div>
+            <div class="metric-bar">
+                <div class="bar-track">
+                    <div class="bar-fill bar-lcoe js-bar-lcoe"></div>
+                </div>
+            </div>
+            <div class="metric-value skeleton js-val-lcoe">--</div>
+        </div>
+
+        <!-- PPA Tariff Row -->
+        <div class="metric-row">
+            <div class="metric-label">
+                <span class="label-main">PPA TARIFF</span>
+                <span class="label-sub js-sub-tariff">(Selling Price)</span>
+            </div>
+            <div class="metric-bar">
+                <div class="bar-track">
+                    <div class="bar-fill bar-cost js-bar-tariff-base"></div>
+                    <div class="bar-fill bar-profit js-bar-tariff-margin"></div>
+                </div>
+            </div>
+            <div class="metric-value skeleton js-val-tariff">--</div>
+        </div>
+
+    </div>
+
+    <!-- ═══ FOOTER — Margin Summary ═══ -->
+    <div class="card-footer">
+        <div class="footer-delta">
+            <span class="delta-arrow js-delta-arrow">●</span>
+            <span class="delta-pct js-delta-pct">--%</span>
+            <span class="delta-tag">margin</span>
+        </div>
+        <div class="footer-sep"></div>
+        <div class="footer-margin js-margin-val">--</div>
+        <div class="footer-sep"></div>
+        <div class="footer-ratio">
+            <div class="ratio-track">
+                <div class="ratio-fill js-ratio-fill"></div>
+            </div>
+            <span class="ratio-text js-ratio-text">--</span>
+        </div>
+    </div>
+
+    <!-- ═══ TOOLTIP — Glassmorphism ═══ -->
+    <div class="tooltip-container">
+        <div class="tooltip-content js-tooltip"></div>
+    </div>
+
+</div>

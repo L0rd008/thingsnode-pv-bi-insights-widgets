@@ -1,0 +1,68 @@
+[
+  {
+    "id": "widgetTitle",
+    "name": "Widget Title",
+    "type": "text",
+    "default": "LCOE VS TARIFF COMPARISON"
+  },
+  {
+    "id": "currency",
+    "name": "Currency Symbol",
+    "type": "text",
+    "default": "LKR"
+  },
+  {
+    "id": "unit",
+    "name": "Unit String",
+    "type": "text",
+    "default": "/ kWh",
+    "helpText": "Unit displayed after the value (e.g. / kWh, per unit)."
+  },
+  {
+    "id": "decimals",
+    "name": "Decimal Places",
+    "type": "number",
+    "default": 2,
+    "min": 0,
+    "step": 1,
+    "helpText": "Number of decimal places for data values."
+  },
+  {
+    "id": "warningThreshold",
+    "name": "Warning Threshold (%)",
+    "type": "number",
+    "default": 10,
+    "min": 0,
+    "max": 100,
+    "step": 1,
+    "helpText": "Margin percentage below which the status shows 'Marginal' instead of 'Profitable'. Default 10%."
+  },
+  {
+    "id": "lcoeSubLabel",
+    "name": "LCOE Sub-Label",
+    "type": "text",
+    "default": "(Levelized Cost)",
+    "helpText": "Small text under 'LCOE'."
+  },
+  {
+    "id": "tariffSubLabel",
+    "name": "Tariff Sub-Label",
+    "type": "text",
+    "default": "(Selling Price)",
+    "helpText": "Small text under 'PPA Tariff'."
+  },
+  {
+    "id": "tooltipText",
+    "name": "Tooltip Content (Override)",
+    "type": "text",
+    "helpText": "Override the auto-generated context-aware tooltip. Leave empty for dynamic tooltip that adapts to data.",
+    "default": ""
+  },
+  {
+    "id": "accentColor",
+    "name": "Custom Accent Color",
+    "type": "text",
+    "helpText": "Override theme accent color, e.g. #FF6B35. Leave empty for default cyan.",
+    "default": ""
+  }
+]
