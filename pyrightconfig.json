@@ -1,0 +1,10 @@
+{
+    "pythonVersion": "3.13",
+    "pythonPlatform": "Windows",
+    "executionEnvironments": [
+        {
+            "root": ".",
+            "pythonPath": "C:/Python313/python.exe"
+        }
+    ]
+}
