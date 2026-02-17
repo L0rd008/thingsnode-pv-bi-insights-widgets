@@ -1,0 +1,63 @@
+<div class="risk-panel js-panel-root">
+
+    <!-- ═══ HEADER ═══ -->
+    <div class="panel-header">
+        <div class="panel-title js-title">RISK SUMMARY</div>
+        <div class="header-right">
+            <span class="resolution-label js-resolution">PORTFOLIO</span>
+        </div>
+    </div>
+
+    <!-- ═══ CONTENT ═══ -->
+    <div class="panel-content">
+        <!-- Main Value Row -->
+        <div class="value-row">
+            <span class="main-value skeleton js-value">--</span>
+            <span class="unit js-unit">--</span>
+        </div>
+
+        <!-- Sub-Content -->
+        <div class="sub-content">
+            <!-- Status Row -->
+            <div class="status-row">
+                <span class="status-label">Status:</span>
+                <span class="status-value skeleton js-status">--</span>
+            </div>
+
+            <!-- Risk Gauge -->
+            <div class="risk-gauge">
+                <div class="gauge-track">
+                    <div class="gauge-fill js-gauge-fill"></div>
+                    <div class="gauge-tick tick-p50" data-label="P50"></div>
+                    <div class="gauge-tick tick-p75" data-label="P75"></div>
+                    <div class="gauge-tick tick-p90" data-label="P90"></div>
+                </div>
+                <span class="gauge-label js-gauge-label">--</span>
+            </div>
+
+            <!-- Tracking Row -->
+            <div class="tracking-row">
+                <div class="tracking-container">
+                    <span class="tracking-value js-tracking">--</span>
+                </div>
+                <div class="trend-icon js-trend-icon">
+                    <svg viewBox="0 0 24 24">
+                        <path
+                            d="M16,6L18.29,8.29L13.41,13.17L9.41,9.17L2,16.59L3.41,18L9.41,12L13.41,16L19.71,9.71L22,12V6H16Z" />
+                    </svg>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══ FOOTER ═══ -->
+    <div class="card-footer">
+        <span class="footer-label"><span class="js-time-horizon">Annual Forecast</span> · <span class="js-footer-text">Financial Risk · Revenue at Risk</span></span>
+    </div>
+
+    <!-- ═══ TOOLTIP — Glassmorphism ═══ -->
+    <div class="tooltip-container">
+        <div class="tooltip-content js-tooltip"></div>
+    </div>
+
+</div>

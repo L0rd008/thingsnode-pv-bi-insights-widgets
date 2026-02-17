@@ -1,0 +1,100 @@
+[
+    {
+        "id": "cardTitle",
+        "name": "Panel Title",
+        "type": "text",
+        "default": "RISK SUMMARY PANEL"
+    },
+    {
+        "id": "enableManualSimulation",
+        "name": "Enable Dummy Simulation?",
+        "type": "switch",
+        "default": false
+    },
+    {
+        "id": "simTracking",
+        "name": "Tracking Text",
+        "type": "text",
+        "default": "Between P75 & P90"
+    },
+    {
+        "id": "simRar",
+        "name": "RaR Value (Number)",
+        "type": "number",
+        "default": 460000
+    },
+    {
+        "id": "simPercentile",
+        "name": "Simulated Percentile (0-100)",
+        "type": "number",
+        "default": 83
+    },
+    {
+        "id": "simStatus",
+        "name": "Status Text",
+        "type": "text",
+        "default": "HIGH RISK - MONITORING"
+    },
+    {
+        "id": "simLevel",
+        "name": "Risk Level (Color)",
+        "type": "select",
+        "default": "critical",
+        "options": [
+            {
+                "value": "critical",
+                "label": "Critical (Red)"
+            },
+            {
+                "value": "warning",
+                "label": "Warning (Amber)"
+            },
+            {
+                "value": "good",
+                "label": "Good (Green)"
+            }
+        ]
+    },
+    {
+        "id": "currency",
+        "name": "Currency Symbol",
+        "type": "text",
+        "default": "$"
+    },
+    {
+        "id": "unit",
+        "name": "Currency Suffix",
+        "type": "text",
+        "default": " USD"
+    },
+    {
+        "id": "decimals",
+        "name": "Decimals",
+        "type": "number",
+        "default": 0
+    },
+    {
+        "id": "footerLabel",
+        "name": "Footer Label",
+        "type": "text",
+        "default": "Financial Risk · Revenue at Risk"
+    },
+    {
+        "id": "tooltipText",
+        "name": "Tooltip (blank = auto-generate)",
+        "type": "text",
+        "default": ""
+    },
+    {
+        "id": "timeHorizon",
+        "name": "Time Horizon Label",
+        "type": "text",
+        "default": "Annual Forecast"
+    },
+    {
+        "id": "resolution",
+        "name": "Resolution Level",
+        "type": "text",
+        "default": "Portfolio"
+    }
+]
