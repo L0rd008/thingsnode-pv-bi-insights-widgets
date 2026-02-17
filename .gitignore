@@ -1,0 +1,25 @@
+﻿# IDE / editor
+.vscode/
+.idea/
+*.code-workspace
+
+# OS metadata
+.DS_Store
+Thumbs.db
+
+# Python cache / virtual environments
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Generated artifacts
+All Widgets.txt
+
+# Confidential local context / credentials (do not publish)
+Context/
+Finance_Dummy.txt
+Degradation Adjusted Yield Index/.py
+
+# Potentially sensitive screenshots
+**/Screenshot *.png
