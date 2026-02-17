@@ -1,0 +1,284 @@
+/* ========================================
+   Lifetime ESG Summary Card
+   ThingsBoard v4.3.0 PE | Latest Values
+   Dynamic scaling — all sizes in em
+   ======================================== */
+.esg-summary-card {
+    /* --- COLOR TOKENS --- */
+    --c-accent: #76ff93;
+    --c-accent-dim: rgba(118, 255, 147, 0.7);
+    --c-accent-glow: rgba(118, 255, 147, 0.12);
+    --c-accent-border: rgba(118, 255, 147, 0.4);
+    --c-accent-hover: rgba(118, 255, 147, 0.8);
+    --c-accent-glow-hover: rgba(118, 255, 147, 0.25);
+    --c-bg: linear-gradient(180deg, rgba(2, 10, 67, 0.95) 0%, rgba(5, 20, 50, 0.95) 100%);
+    --c-text: #FFFFFF;
+    --c-text-dim: #B0BEC5;
+    --c-tooltip-bg: rgba(202, 218, 221, 0.9);
+    --c-row-bg: rgba(255, 255, 255, 0.04);
+    --c-row-border: rgba(255, 255, 255, 0.06);
+    --c-row-hover: rgba(255, 255, 255, 0.1);
+
+    /* Row accent colors */
+    --c-tree: #76ff93;
+    --c-tree-bg: rgba(46, 125, 50, 0.3);
+    --c-home: #FF7043;
+    --c-home-bg: rgba(69, 90, 100, 0.5);
+    --c-home-val: #CFD8DC;
+    --c-time: #42A5F5;
+    --c-time-bg: rgba(21, 101, 192, 0.3);
+
+    /* --- LAYOUT: Absolute fill --- */
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: 100%;
+    height: 100%;
+    margin: 0;
+
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: center;
+
+    background: var(--c-bg);
+    border: 1px solid var(--c-accent-border);
+    box-shadow: 0 0 12px var(--c-accent-glow), inset 0 0 15px rgba(0, 0, 0, 0.4);
+    border-radius: 8px;
+    padding: 0.6em 0.7em;
+    box-sizing: border-box;
+    overflow: hidden;
+    z-index: 1;
+
+    font-family: 'Roboto', sans-serif;
+    color: var(--c-text);
+    transition: border-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+/* --- HOVER GLOW --- */
+.esg-summary-card:hover {
+    border-color: var(--c-accent-hover);
+    box-shadow: 0 0 22px var(--c-accent-glow-hover), inset 0 0 8px rgba(0, 0, 0, 0.2);
+}
+
+/* ===================
+   HEADER
+   =================== */
+.card-header {
+    flex: 0 0 auto;
+    z-index: 2;
+    line-height: 1.1;
+    margin-bottom: 0.3em;
+}
+
+.card-title {
+    font-size: 0.7em;
+    font-weight: 700;
+    color: var(--c-text);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* ===================
+   ROWS CONTAINER
+   =================== */
+.rows-container {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3em;
+    flex: 1 1 auto;
+    z-index: 2;
+    overflow: hidden;
+    justify-content: center;
+    min-height: 0;
+}
+
+/* ===================
+   INDIVIDUAL ROW
+   =================== */
+.esg-row {
+    background-color: var(--c-row-bg);
+    border: 1px solid var(--c-row-border);
+    border-radius: 0.4em;
+    padding: 0.3em 0.45em;
+    display: flex;
+    align-items: center;
+    gap: 0.4em;
+    flex: 1 1 auto;
+    min-height: 0;
+    transition: background-color 0.2s ease, border-color 0.2s ease;
+}
+
+.esg-row:hover {
+    background-color: var(--c-row-hover);
+    border-color: rgba(255, 255, 255, 0.12);
+}
+
+/* ===================
+   ICON BOX
+   =================== */
+.icon-box {
+    width: 1.8em;
+    height: 1.8em;
+    border-radius: 0.35em;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.icon-box svg {
+    width: 1.05em;
+    height: 1.05em;
+}
+
+/* --- Row-specific icon/value colors --- */
+.row-tree .icon-box {
+    background-color: var(--c-tree-bg);
+}
+
+.row-tree svg {
+    fill: var(--c-tree);
+}
+
+.row-tree .val-text {
+    color: var(--c-tree);
+}
+
+.row-home .icon-box {
+    background-color: var(--c-home-bg);
+}
+
+.row-home svg {
+    fill: var(--c-home);
+}
+
+.row-home .val-text {
+    color: var(--c-home-val);
+}
+
+.row-time .icon-box {
+    background-color: var(--c-time-bg);
+}
+
+.row-time svg {
+    fill: var(--c-time);
+}
+
+.row-time .val-text {
+    color: var(--c-time);
+}
+
+/* ===================
+   CONTENT TEXT
+   =================== */
+.content-box {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    min-width: 0;
+    flex: 1;
+}
+
+.lbl-text {
+    font-size: 0.5em;
+    font-weight: 600;
+    text-transform: uppercase;
+    color: var(--c-text);
+    letter-spacing: 0.03em;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    opacity: 0.85;
+}
+
+.val-text {
+    font-size: 1.1em;
+    font-weight: 700;
+    line-height: 1.1;
+}
+
+.unit-text {
+    font-size: 0.55em;
+    font-weight: 600;
+    opacity: 0.8;
+    margin-left: 0.1em;
+}
+
+/* ===================
+   DECORATIVE SPARKLE
+   =================== */
+.decor-sparkle {
+    position: absolute;
+    bottom: 0.3em;
+    right: 0.5em;
+    opacity: 0.04;
+    z-index: 1;
+    pointer-events: none;
+}
+
+.decor-sparkle svg {
+    width: 3em;
+    height: 3em;
+    fill: var(--c-accent);
+}
+
+/* ===================
+   TOOLTIP
+   =================== */
+.tooltip-container {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    padding: 0.4em 0.6em;
+    background-color: var(--c-tooltip-bg);
+    backdrop-filter: blur(4px);
+    transform: translateY(100%);
+    opacity: 0;
+    transition: all 0.3s ease;
+    z-index: 10;
+    pointer-events: none;
+    border-bottom-left-radius: 8px;
+    border-bottom-right-radius: 8px;
+}
+
+.esg-summary-card:hover .tooltip-container {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+.tooltip-text {
+    font-size: 0.55em;
+    color: #000;
+    font-weight: 600;
+    line-height: 1.3;
+}
+
+/* ===================
+   LOADING SKELETON
+   =================== */
+.skeleton {
+    opacity: 0.5;
+    animation: pulse-load 1.5s infinite;
+}
+
+@keyframes pulse-load {
+    0% {
+        opacity: 0.3;
+    }
+
+    50% {
+        opacity: 0.6;
+    }
+
+    100% {
+        opacity: 0.3;
+    }
+}

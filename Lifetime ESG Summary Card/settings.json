@@ -1,0 +1,86 @@
+[
+    {
+        "id": "widgetTitle",
+        "name": "Widget Title",
+        "type": "text",
+        "default": "LIFETIME ESG IMPACT SUMMARY"
+    },
+    {
+        "id": "co2Label",
+        "name": "CO₂ Row Label",
+        "type": "text",
+        "default": "LIFETIME CO₂ AVOIDED",
+        "helpText": "Label above the CO₂ value."
+    },
+    {
+        "id": "homesLabel",
+        "name": "Homes Row Label",
+        "type": "text",
+        "default": "EQUIVALENT HOMES POWERED",
+        "helpText": "Label above the homes value."
+    },
+    {
+        "id": "timeLabel",
+        "name": "Time Row Label",
+        "type": "text",
+        "default": "YEARS SINCE COMMISSIONING",
+        "helpText": "Label above the time value."
+    },
+    {
+        "id": "co2Factor",
+        "name": "CO₂ Factor (tCO₂ per kWh)",
+        "type": "number",
+        "default": 0.0007,
+        "helpText": "Multiply raw energy (kWh) by this to get tCO₂ avoided."
+    },
+    {
+        "id": "homeFactor",
+        "name": "Home Equivalent Divider",
+        "type": "number",
+        "default": 1330,
+        "helpText": "Divide energy (kWh) by this to get equivalent homes powered."
+    },
+    {
+        "id": "divider",
+        "name": "Input Value Divider",
+        "type": "number",
+        "default": 1,
+        "helpText": "Divide raw telemetry value by this number before calculations."
+    },
+    {
+        "id": "decimals",
+        "name": "Decimal Places",
+        "type": "number",
+        "default": 0,
+        "min": 0,
+        "step": 1,
+        "helpText": "Number of decimal places for CO₂ and homes values."
+    },
+    {
+        "id": "staticYears",
+        "name": "Years Running (Static Override)",
+        "type": "number",
+        "default": 5.2,
+        "helpText": "Fixed years value. Leave empty to auto-calculate from commissioning date."
+    },
+    {
+        "id": "startDate",
+        "name": "Commissioning Date (YYYY-MM-DD)",
+        "type": "text",
+        "default": "2020-10-01",
+        "helpText": "Used to calculate years if static override is empty."
+    },
+    {
+        "id": "tooltipText",
+        "name": "Tooltip Content",
+        "type": "text",
+        "helpText": "Hover tooltip text. Leave empty to hide.",
+        "default": "Lifetime environmental impact metrics derived from total energy generation."
+    },
+    {
+        "id": "accentColor",
+        "name": "Custom Accent Color (Optional)",
+        "type": "text",
+        "helpText": "Override theme accent color, e.g. #FF6B35. Leave empty for default green."
+    }
+]
