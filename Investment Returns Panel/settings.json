@@ -1,0 +1,207 @@
+[
+  {
+    "id": "panelTitle",
+    "name": "Panel Title",
+    "type": "text",
+    "default": "INVESTMENT RETURNS",
+    "helpText": "Header title displayed at the top of the panel."
+  },
+  {
+    "id": "panelFooter",
+    "name": "Footer Text",
+    "type": "text",
+    "default": "Project Life Assumptions Applied: 25 Years",
+    "helpText": "Footer text displayed below the sub-cards."
+  },
+  {
+    "id": "accentColor",
+    "name": "Accent Color",
+    "type": "text",
+    "default": "",
+    "helpText": "Override the border glow accent (CSS color, e.g. #06F5FF). Leave blank for default cyan."
+  },
+  {
+    "id": "tooltipText",
+    "name": "Tooltip Content (Override)",
+    "type": "text",
+    "default": "",
+    "helpText": "Override the dynamic card-level tooltip. Leave empty for auto-generated summary."
+  },
+  {
+    "id": "c1_title",
+    "name": "Card 1 — Title",
+    "type": "text",
+    "default": "IRR (%)",
+    "helpText": "Title label for the first sub-card."
+  },
+  {
+    "id": "c1_sub",
+    "name": "Card 1 — Sub-Footer",
+    "type": "text",
+    "default": "Projected: 12%",
+    "helpText": "Context text below the value."
+  },
+  {
+    "id": "c1_ttLabel",
+    "name": "Card 1 — Tooltip Label",
+    "type": "text",
+    "default": "Target IRR",
+    "helpText": "Hover tooltip label."
+  },
+  {
+    "id": "c1_ttVal",
+    "name": "Card 1 — Tooltip Value",
+    "type": "text",
+    "default": "12.0%",
+    "helpText": "Hover tooltip value."
+  },
+  {
+    "id": "c1_prefix",
+    "name": "Card 1 — Prefix",
+    "type": "text",
+    "default": "",
+    "helpText": "Text prepended to the formatted value (e.g. '$' or 'LKR ')."
+  },
+  {
+    "id": "c1_suffix",
+    "name": "Card 1 — Suffix",
+    "type": "text",
+    "default": "%",
+    "helpText": "Text appended to the formatted value (e.g. '%' or 'M')."
+  },
+  {
+    "id": "c1_divider",
+    "name": "Card 1 — Divider",
+    "type": "number",
+    "default": 1,
+    "min": 0.000001,
+    "helpText": "Divide the raw value by this number before display (e.g. 1000000 for millions)."
+  },
+  {
+    "id": "c1_decimals",
+    "name": "Card 1 — Decimals",
+    "type": "number",
+    "default": 1,
+    "min": 0,
+    "step": 1,
+    "helpText": "Number of decimal places for this card's value."
+  },
+  {
+    "id": "c2_title",
+    "name": "Card 2 — Title",
+    "type": "text",
+    "default": "NPV (LKR)",
+    "helpText": "Title label for the second sub-card."
+  },
+  {
+    "id": "c2_sub",
+    "name": "Card 2 — Sub-Footer",
+    "type": "text",
+    "default": "Discount Rate: 7%",
+    "helpText": "Context text below the value."
+  },
+  {
+    "id": "c2_ttLabel",
+    "name": "Card 2 — Tooltip Label",
+    "type": "text",
+    "default": "Discount Rate",
+    "helpText": "Hover tooltip label."
+  },
+  {
+    "id": "c2_ttVal",
+    "name": "Card 2 — Tooltip Value",
+    "type": "text",
+    "default": "7.0%",
+    "helpText": "Hover tooltip value."
+  },
+  {
+    "id": "c2_prefix",
+    "name": "Card 2 — Prefix",
+    "type": "text",
+    "default": "LKR ",
+    "helpText": "Text prepended to the formatted value."
+  },
+  {
+    "id": "c2_suffix",
+    "name": "Card 2 — Suffix",
+    "type": "text",
+    "default": "M",
+    "helpText": "Text appended to the formatted value."
+  },
+  {
+    "id": "c2_divider",
+    "name": "Card 2 — Divider",
+    "type": "number",
+    "default": 1000000,
+    "min": 0.000001,
+    "helpText": "Divide the raw value by this number before display."
+  },
+  {
+    "id": "c2_decimals",
+    "name": "Card 2 — Decimals",
+    "type": "number",
+    "default": 1,
+    "min": 0,
+    "step": 1,
+    "helpText": "Number of decimal places for this card's value."
+  },
+  {
+    "id": "c3_title",
+    "name": "Card 3 — Title",
+    "type": "text",
+    "default": "ROE (%)",
+    "helpText": "Title label for the third sub-card."
+  },
+  {
+    "id": "c3_sub",
+    "name": "Card 3 — Sub-Footer",
+    "type": "text",
+    "default": "Equity: LKR 25 M",
+    "helpText": "Context text below the value."
+  },
+  {
+    "id": "c3_ttLabel",
+    "name": "Card 3 — Tooltip Label",
+    "type": "text",
+    "default": "Total Equity",
+    "helpText": "Hover tooltip label."
+  },
+  {
+    "id": "c3_ttVal",
+    "name": "Card 3 — Tooltip Value",
+    "type": "text",
+    "default": "LKR 25.0 M",
+    "helpText": "Hover tooltip value."
+  },
+  {
+    "id": "c3_prefix",
+    "name": "Card 3 — Prefix",
+    "type": "text",
+    "default": "",
+    "helpText": "Text prepended to the formatted value."
+  },
+  {
+    "id": "c3_suffix",
+    "name": "Card 3 — Suffix",
+    "type": "text",
+    "default": "%",
+    "helpText": "Text appended to the formatted value."
+  },
+  {
+    "id": "c3_divider",
+    "name": "Card 3 — Divider",
+    "type": "number",
+    "default": 1,
+    "min": 0.000001,
+    "helpText": "Divide the raw value by this number before display."
+  },
+  {
+    "id": "c3_decimals",
+    "name": "Card 3 — Decimals",
+    "type": "number",
+    "default": 1,
+    "min": 0,
+    "step": 1,
+    "helpText": "Number of decimal places for this card's value."
+  }
+]

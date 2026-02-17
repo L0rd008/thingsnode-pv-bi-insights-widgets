@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Investment Returns Panel — Visual Test</title>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style id="widget-css"></style>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: #0d1117;
+            font-family: 'Roboto', sans-serif;
+            color: #fff;
+            padding: 24px;
+        }
+
+        h1 {
+            font-size: 18px;
+            margin-bottom: 16px;
+            color: #8b949e;
+        }
+
+        .test-grid {
+            display: flex;
+            flex-direction: column;
+            gap: 24px;
+            margin-bottom: 40px;
+        }
+
+        .test-cell {
+            position: relative;
+            border: 1px dashed rgba(255, 255, 255, 0.15);
+        }
+
+        .test-cell::after {
+            content: attr(data-label);
+            position: absolute;
+            bottom: -18px;
+            left: 0;
+            font-size: 11px;
+            color: #8b949e;
+        }
+
+        .controls {
+            margin-bottom: 20px;
+            display: flex;
+            gap: 16px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .controls label {
+            font-size: 13px;
+            color: #8b949e;
+        }
+
+        .controls input[type=range] {
+            width: 160px;
+        }
+
+        .controls span {
+            font-size: 12px;
+            color: #58a6ff;
+            min-width: 60px;
+        }
+
+        #custom-cell {
+            transition: width 0.2s, height 0.2s;
+        }
+    </style>
+</head>
+
+<body>
+
+    <h1>Investment Returns Panel v2.0 — Visual Test Harness</h1>
+
+    <div class="controls">
+        <label>Width: <input type="range" id="rW" min="350" max="900" value="600"><span id="vW">600px</span></label>
+        <label>Height: <input type="range" id="rH" min="100" max="400" value="200"><span id="vH">200px</span></label>
+    </div>
+
+    <div class="test-grid">
+        <!-- Resizable — All Positive -->
+        <div class="test-cell" id="custom-cell" data-label="Resizable — All Positive (HEALTHY)"
+            style="width:600px;height:200px;" data-scenario="healthy"></div>
+
+        <!-- Fixed — Mixed -->
+        <div class="test-cell" data-label="600×200 — Negative NPV (NEEDS ATTENTION)" style="width:600px;height:200px;"
+            data-scenario="negative"></div>
+
+        <!-- Small -->
+        <div class="test-cell" data-label="400×150 — All Positive (compact)" style="width:400px;height:150px;"
+            data-scenario="compact"></div>
+
+        <!-- Wide -->
+        <div class="test-cell" data-label="800×180 — Large values" style="width:800px;height:180px;"
+            data-scenario="large"></div>
+    </div>
+
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    <script>
+        var scenarios = {
+            healthy: {
+                data: [
+                    { val: 14.2 },  // IRR
+                    { val: 85000000 },  // NPV (raw, will be divided by 1M)
+                    { val: 18.7 }   // ROE
+                ]
+            },
+            negative: {
+                data: [
+                    { val: 8.3 },
+                    { val: -12000000 },  // Negative NPV
+                    { val: 5.1 }
+                ]
+            },
+            compact: {
+                data: [
+                    { val: 11.5 },
+                    { val: 42000000 },
+                    { val: 15.2 }
+                ]
+            },
+            large: {
+                data: [
+                    { val: 22.4 },
+                    { val: 350000000 },
+                    { val: 31.8 }
+                ]
+            }
+        };
+
+        // Load CSS
+        fetch('.css').then(r => r.text()).then(css => {
+            document.getElementById('widget-css').textContent = css;
+        });
+
+        // Load HTML + JS
+        Promise.all([
+            fetch('.html').then(r => r.text()),
+            fetch('.js').then(r => r.text())
+        ]).then(function (results) {
+            var html = results[0];
+            var jsCode = results[1];
+
+            document.querySelectorAll('.test-cell').forEach(function (cell) {
+                cell.innerHTML = html;
+                var scenarioKey = cell.dataset.scenario;
+                var scen = scenarios[scenarioKey] || scenarios.healthy;
+                runWidget(cell, scen, jsCode);
+            });
+
+            // Slider controls
+            var rW = document.getElementById('rW');
+            var rH = document.getElementById('rH');
+            var vW = document.getElementById('vW');
+            var vH = document.getElementById('vH');
+            var customCell = document.getElementById('custom-cell');
+
+            function updateSize() {
+                customCell.style.width = rW.value + 'px';
+                customCell.style.height = rH.value + 'px';
+                vW.textContent = rW.value + 'px';
+                vH.textContent = rH.value + 'px';
+                if (customCell._resizeFn) customCell._resizeFn();
+            }
+            rW.addEventListener('input', updateSize);
+            rH.addEventListener('input', updateSize);
+        });
+
+        function runWidget(cell, scenario, jsCode) {
+            var $cell = $(cell);
+
+            var self = {};
+            self.ctx = {
+                $container: $cell,
+                settings: {
+                    panelTitle: 'INVESTMENT RETURNS',
+                    panelFooter: 'Project Life Assumptions Applied: 25 Years',
+                    c1_title: 'IRR (%)',
+                    c1_sub: 'Projected: 12%',
+                    c1_ttLabel: 'Target IRR',
+                    c1_ttVal: '12.0%',
+                    c1_prefix: '',
+                    c1_suffix: '%',
+                    c1_divider: 1,
+                    c1_decimals: 1,
+                    c2_title: 'NPV (LKR)',
+                    c2_sub: 'Discount Rate: 7%',
+                    c2_ttLabel: 'Discount Rate',
+                    c2_ttVal: '7.0%',
+                    c2_prefix: 'LKR ',
+                    c2_suffix: 'M',
+                    c2_divider: 1000000,
+                    c2_decimals: 1,
+                    c3_title: 'ROE (%)',
+                    c3_sub: 'Equity: LKR 25 M',
+                    c3_ttLabel: 'Total Equity',
+                    c3_ttVal: 'LKR 25.0 M',
+                    c3_prefix: '',
+                    c3_suffix: '%',
+                    c3_divider: 1,
+                    c3_decimals: 1
+                },
+                data: scenario.data.map(function (d) {
+                    return { data: [[Date.now(), d.val]] };
+                }),
+                detectChanges: function () { }
+            };
+
+            try {
+                var fn = new Function('self', jsCode);
+                fn(self);
+            } catch (e) {
+                console.error('Widget JS error:', e);
+            }
+
+            cell._resizeFn = function () {
+                if (self.onResize) self.onResize();
+            };
+
+            $(window).on('resize', function () {
+                if (self.onResize) self.onResize();
+            });
+        }
+    </script>
+
+</body>
+
+</html>
