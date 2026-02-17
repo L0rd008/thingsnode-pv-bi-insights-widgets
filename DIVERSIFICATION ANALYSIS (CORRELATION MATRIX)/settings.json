@@ -1,0 +1,8 @@
+[
+  {
+    "id": "widgetTitle",
+    "name": "Widget Title",
+    "type": "text",
+    "default": "Diversification Analysis (Inter-Site Correlation)"
+  }
+]
