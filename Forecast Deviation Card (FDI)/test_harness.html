@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Forecast Deviation Card (FDI) — Visual Test</title>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style id="widget-css"></style>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: #0d1117;
+            font-family: 'Roboto', sans-serif;
+            color: #fff;
+            padding: 24px;
+        }
+
+        h1 {
+            font-size: 18px;
+            margin-bottom: 16px;
+            color: #8b949e;
+        }
+
+        .test-grid {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            margin-bottom: 40px;
+        }
+
+        .test-cell {
+            position: relative;
+            border: 1px dashed rgba(255, 255, 255, 0.15);
+        }
+
+        .test-cell::after {
+            content: attr(data-label);
+            position: absolute;
+            bottom: -18px;
+            left: 0;
+            font-size: 11px;
+            color: #8b949e;
+        }
+
+        .controls {
+            margin-bottom: 20px;
+            display: flex;
+            gap: 16px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .controls label {
+            font-size: 13px;
+            color: #8b949e;
+        }
+
+        .controls input[type=range] {
+            width: 160px;
+        }
+
+        .controls span {
+            font-size: 12px;
+            color: #58a6ff;
+            min-width: 60px;
+        }
+
+        #custom-cell {
+            transition: width 0.2s, height 0.2s;
+        }
+    </style>
+</head>
+
+<body>
+
+    <h1>Forecast Deviation Card (FDI) v2.1 — Compact Layout Verification</h1>
+
+    <div class="controls">
+        <label>Width: <input type="range" id="rW" min="300" max="700" value="500"><span id="vW">500px</span></label>
+        <label>Height: <input type="range" id="rH" min="80" max="250" value="125"><span id="vH">125px</span></label>
+    </div>
+
+    <div class="test-grid">
+        <!-- Resizable widget — ON TRACK (positive) -->
+        <div class="test-cell" id="custom-cell" data-label="Resizable — ON TRACK (+3.2%)"
+            style="width:500px;height:125px;" data-scenario="good"></div>
+
+        <!-- Fixed sizes / severity states -->
+        <div class="test-cell" data-label="500×125 — WARNING (-7.5%)" style="width:500px;height:125px;"
+            data-scenario="warning"></div>
+        <div class="test-cell" data-label="500×125 — CRITICAL (-14.3%)" style="width:500px;height:125px;"
+            data-scenario="critical"></div>
+        <div class="test-cell" data-label="400×100 — ON TRACK (+1.8%)" style="width:400px;height:100px;"
+            data-scenario="good2"></div>
+        <div class="test-cell" data-label="600×140 — WARNING (-6.1%)" style="width:600px;height:140px;"
+            data-scenario="widewarn"></div>
+    </div>
+
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    <script>
+        // Test data scenarios
+        var scenarios = {
+            good: { forecast: 42.5, actual: 43.86, deviation: 3.2 },
+            warning: { forecast: 38.0, actual: 35.15, deviation: -7.5 },
+            critical: { forecast: 45.0, actual: 38.57, deviation: -14.3 },
+            good2: { forecast: 50.0, actual: 50.9, deviation: 1.8 },
+            widewarn: { forecast: 41.0, actual: 38.5, deviation: -6.1 }
+        };
+
+        // Load CSS
+        fetch('.css').then(r => r.text()).then(css => {
+            document.getElementById('widget-css').textContent = css;
+        });
+
+        // Load HTML template + JS
+        Promise.all([
+            fetch('.html').then(r => r.text()),
+            fetch('.js').then(r => r.text())
+        ]).then(function (results) {
+            var html = results[0];
+            var jsCode = results[1];
+
+            document.querySelectorAll('.test-cell').forEach(function (cell) {
+                cell.innerHTML = html;
+
+                var scenarioKey = cell.dataset.scenario;
+                var scen = scenarios[scenarioKey] || scenarios.good;
+
+                runWidget(cell, scen, jsCode);
+            });
+
+            // Slider controls
+            var rW = document.getElementById('rW');
+            var rH = document.getElementById('rH');
+            var vW = document.getElementById('vW');
+            var vH = document.getElementById('vH');
+            var customCell = document.getElementById('custom-cell');
+
+            function updateSize() {
+                customCell.style.width = rW.value + 'px';
+                customCell.style.height = rH.value + 'px';
+                vW.textContent = rW.value + 'px';
+                vH.textContent = rH.value + 'px';
+                if (customCell._resizeFn) customCell._resizeFn();
+            }
+            rW.addEventListener('input', updateSize);
+            rH.addEventListener('input', updateSize);
+        });
+
+        function runWidget(cell, scenario, jsCode) {
+            var $cell = $(cell);
+
+            // Mock ThingsBoard self context
+            var self = {};
+            self.ctx = {
+                $container: $cell,
+                settings: {
+                    cardTitle: 'FDI vs P50 (%)',
+                    footerText: 'Deviation from Median Expectation',
+                    resolution: 'Plant',
+                    decimals: 1,
+                    warningThreshold: -5,
+                    criticalThreshold: -10,
+                    gaugeRange: 20,
+                    enableManualOverride: false,
+                    invertLogic: false,
+                    unitLabel: 'MWh'
+                },
+                data: [
+                    { dataKey: { name: 'forecast_p50_daily' }, data: [[Date.now(), scenario.forecast]] },
+                    { dataKey: { name: 'total_generation' }, data: [[Date.now(), scenario.actual]] }
+                ],
+                detectChanges: function () { }
+            };
+
+            // Execute widget JS in this context
+            try {
+                var fn = new Function('self', jsCode);
+                fn(self);
+            } catch (e) {
+                console.error('Widget JS error:', e);
+            }
+
+            // Store resize function
+            cell._resizeFn = function () {
+                if (self.onResize) self.onResize();
+            };
+
+            // Window resize
+            $(window).on('resize', function () {
+                if (self.onResize) self.onResize();
+            });
+        }
+    </script>
+
+</body>
+
+</html>

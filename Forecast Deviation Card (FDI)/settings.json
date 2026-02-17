@@ -1,0 +1,100 @@
+[
+    {
+        "id": "cardTitle",
+        "name": "Card Title",
+        "type": "text",
+        "default": "FDI vs P50 (%)",
+        "helpText": "Header title for the card."
+    },
+    {
+        "id": "footerText",
+        "name": "Footer Description",
+        "type": "text",
+        "default": "Deviation from Median Expectation",
+        "helpText": "Footer label text."
+    },
+    {
+        "id": "unitLabel",
+        "name": "Energy Unit",
+        "type": "text",
+        "default": "MWh",
+        "helpText": "Unit displayed in context values."
+    },
+    {
+        "id": "decimals",
+        "name": "Decimal Places",
+        "type": "number",
+        "default": 1,
+        "helpText": "Number of decimal places for deviation percentage and values."
+    },
+    {
+        "id": "forecastKey",
+        "name": "Forecast Telemetry Key (DS[0])",
+        "type": "text",
+        "default": "forecast_p50_daily",
+        "helpText": "Telemetry key for the P50 daily forecast value. Mapped to datasource key [0]."
+    },
+    {
+        "id": "actualKey",
+        "name": "Actual Telemetry Key (DS[1])",
+        "type": "text",
+        "default": "total_generation",
+        "helpText": "Telemetry key for actual daily energy. Mapped to datasource key [1]."
+    },
+    {
+        "id": "p50AttributeKey",
+        "name": "P50 Annual Energy Attribute",
+        "type": "text",
+        "default": "p50_energy",
+        "helpText": "Server attribute key for annual P50 energy (kWh). Used for derived mode fallback."
+    },
+    {
+        "id": "warningThreshold",
+        "name": "Warning Threshold (%)",
+        "type": "number",
+        "default": -5,
+        "helpText": "Deviation at or above this is MINOR DEVIATION (amber). Default: -5%."
+    },
+    {
+        "id": "criticalThreshold",
+        "name": "Critical Threshold (%)",
+        "type": "number",
+        "default": -10,
+        "helpText": "Deviation below this is CRITICAL DEVIATION (red). Default: -10%."
+    },
+    {
+        "id": "accentColor",
+        "name": "Accent Color",
+        "type": "text",
+        "default": "",
+        "helpText": "Override the border glow accent (CSS color, e.g. #06F5FF). Leave blank for default cyan."
+    },
+    {
+        "id": "enableManualOverride",
+        "name": "Enable Manual Simulation?",
+        "type": "switch",
+        "default": false,
+        "helpText": "When enabled, uses the manual deviation value below instead of live data."
+    },
+    {
+        "id": "manualDeviation",
+        "name": "Simulated Deviation %",
+        "type": "number",
+        "default": 2.1,
+        "helpText": "Fixed deviation percentage used in manual simulation mode."
+    },
+    {
+        "id": "invertLogic",
+        "name": "Invert Colors?",
+        "type": "switch",
+        "default": false,
+        "helpText": "Enable if positive deviation is bad (flips green/red logic)."
+    },
+    {
+        "id": "tooltipText",
+        "name": "Tooltip Content (Override)",
+        "type": "text",
+        "default": "",
+        "helpText": "Override the dynamic tooltip. Leave empty for auto-generated context."
+    }
+]
