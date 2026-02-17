@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Capacity Factor Compliance — Visual Test</title>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style id="widget-css"></style>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: #0d1117;
+            font-family: 'Roboto', sans-serif;
+            color: #fff;
+            padding: 24px;
+        }
+
+        h1 {
+            font-size: 18px;
+            margin-bottom: 16px;
+            color: #8b949e;
+        }
+
+        .test-grid {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 24px;
+            align-items: flex-start;
+        }
+
+        .test-cell {
+            position: relative;
+            border: 1px dashed rgba(255, 255, 255, 0.15);
+        }
+
+        .test-cell::after {
+            content: attr(data-label);
+            position: absolute;
+            bottom: -20px;
+            left: 0;
+            right: 0;
+            text-align: center;
+            font-size: 11px;
+            color: #8b949e;
+        }
+
+        .controls {
+            margin-bottom: 20px;
+            display: flex;
+            gap: 16px;
+            align-items: center;
+        }
+
+        .controls label {
+            font-size: 13px;
+            color: #8b949e;
+        }
+
+        .controls input[type=range] {
+            width: 160px;
+        }
+
+        .controls span {
+            font-size: 12px;
+            color: #58a6ff;
+            min-width: 60px;
+        }
+
+        #custom-cell {
+            transition: width 0.2s, height 0.2s;
+        }
+    </style>
+</head>
+
+<body>
+
+    <h1>Capacity Factor Compliance — Visual Verification</h1>
+
+    <div class="controls">
+        <label>Width: <input type="range" id="rW" min="150" max="600" value="300"><span id="vW">300px</span></label>
+        <label>Height: <input type="range" id="rH" min="200" max="700" value="400"><span id="vH">400px</span></label>
+    </div>
+
+    <div class="test-grid">
+        <!-- Resizable widget -->
+        <div class="test-cell" id="custom-cell" data-label="Resizable" style="width:300px;height:400px;"></div>
+
+        <!-- Fixed sizes -->
+        <div class="test-cell" data-label="Tiny (180×240)" style="width:180px;height:240px;"></div>
+        <div class="test-cell" data-label="Small (250×330)" style="width:250px;height:330px;"></div>
+        <div class="test-cell" data-label="Medium (350×450)" style="width:350px;height:450px;"></div>
+        <div class="test-cell" data-label="Wide (500×350)" style="width:500px;height:350px;"></div>
+    </div>
+
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    <script>
+        // Load CSS
+        fetch('.css').then(r => r.text()).then(css => {
+            document.getElementById('widget-css').textContent = css;
+        });
+
+        // Load HTML template
+        fetch('.html').then(r => r.text()).then(html => {
+            document.querySelectorAll('.test-cell').forEach(cell => {
+                cell.innerHTML = html;
+            });
+
+            // Simulate ThingsBoard widget lifecycle for each cell
+            document.querySelectorAll('.test-cell').forEach(function (cell) {
+                var $cell = $(cell);
+                var self = {};
+
+                self.ctx = {
+                    $container: $cell,
+                    settings: {
+                        cardTitle: 'CAPACITY FACTOR COMPLIANCE',
+                        gaugeMax: 50,
+                        highRiskThreshold: 0.90,
+                        medRiskThreshold: 1.0,
+                        decimals: 1,
+                        complianceLabel: 'CONTRACTUAL PERFORMANCE'
+                    },
+                    data: [
+                        { dataKey: { name: 'target_cf' }, data: [[0, 0.17]] },
+                        { dataKey: { name: 'actual_cf' }, data: [[0, 0.185]] }
+                    ]
+                };
+
+                // Run the widget JS in context
+                runWidget(self, $cell);
+            });
+
+            // Slider controls
+            var rW = document.getElementById('rW');
+            var rH = document.getElementById('rH');
+            var vW = document.getElementById('vW');
+            var vH = document.getElementById('vH');
+            var customCell = document.getElementById('custom-cell');
+
+            function updateSize() {
+                customCell.style.width = rW.value + 'px';
+                customCell.style.height = rH.value + 'px';
+                vW.textContent = rW.value + 'px';
+                vH.textContent = rH.value + 'px';
+                // Trigger resize
+                if (customCell._resizeFn) customCell._resizeFn();
+            }
+            rW.addEventListener('input', updateSize);
+            rH.addEventListener('input', updateSize);
+        });
+
+        function runWidget(self, $cell) {
+            var s = self.ctx.settings;
+            var $el = $cell;
+
+            // Cache DOM
+            var $title = $el.find('.js-title');
+            var $statusDot = $el.find('.js-status-dot');
+            var $statusText = $el.find('.js-status-text');
+            var $gaugeVal = $el.find('.js-gauge-val');
+            var $targetPill = $el.find('.js-target-pill');
+            var $gaugeFill = $el.find('.js-gauge-fill');
+            var $needle = $el.find('.js-needle');
+            var $riskBanner = $el.find('.js-risk-banner');
+            var $riskDot = $el.find('.js-risk-dot');
+            var $riskText = $el.find('.js-risk-text');
+            var $barVal = $el.find('.js-bar-val');
+            var $barFill = $el.find('.js-bar-fill');
+            var $perfTitle = $el.find('.js-perf-title');
+            var $tooltip = $el.find('.js-tooltip');
+
+            // SVG gradient
+            try {
+                var svgNS = 'http://www.w3.org/2000/svg';
+                var svgEl = $el.find('.js-gauge-svg')[0];
+                if (svgEl) {
+                    var gId = 'cfG_' + Math.random().toString(36).substr(2, 8);
+                    var defs = document.createElementNS(svgNS, 'defs');
+                    var grad = document.createElementNS(svgNS, 'linearGradient');
+                    grad.setAttribute('id', gId);
+                    grad.setAttribute('x1', '0%'); grad.setAttribute('y1', '0%');
+                    grad.setAttribute('x2', '100%'); grad.setAttribute('y2', '0%');
+                    [{ o: '0%', c: '#FF5252' }, { o: '50%', c: '#FFC107' }, { o: '100%', c: '#66BB6A' }].forEach(function (st) {
+                        var stop = document.createElementNS(svgNS, 'stop');
+                        stop.setAttribute('offset', st.o);
+                        stop.setAttribute('stop-color', st.c);
+                        grad.appendChild(stop);
+                    });
+                    defs.appendChild(grad);
+                    svgEl.insertBefore(defs, svgEl.firstChild);
+                    $gaugeFill.attr('stroke', 'url(#' + gId + ')');
+                }
+            } catch (e) { }
+
+            // Title
+            $title.text(s.cardTitle || 'CAPACITY FACTOR COMPLIANCE');
+            $perfTitle.text(s.complianceLabel || 'CONTRACTUAL PERFORMANCE');
+
+            // Data processing
+            var data = self.ctx.data;
+            var targetCF = null, actualCF = null;
+            var dec = s.decimals != null ? parseInt(s.decimals) : 1;
+
+            for (var i = 0; i < data.length; i++) {
+                if (!data[i].data || data[i].data.length === 0) continue;
+                var key = data[i].dataKey ? data[i].dataKey.name : '';
+                var val = parseFloat(data[i].data[data[i].data.length - 1][1]);
+                if (isNaN(val)) continue;
+                if (key === 'contract_cf_target' || key === 'target_cf') targetCF = val;
+                if (key === 'actual_cf_ytd' || key === 'fin_cf' || key === 'actual_cf' || key === 'capacity_factor') actualCF = val;
+            }
+
+            if (targetCF === null) targetCF = 0.20;
+            if (actualCF === null) actualCF = 0;
+
+            var isRatio = targetCF < 1.05;
+            var targetPct = isRatio ? targetCF * 100 : targetCF;
+            var actualPct = isRatio ? actualCF * 100 : actualCF;
+
+            var complianceRatio = targetPct > 0 ? (actualPct / targetPct) * 100 : 0;
+            var ratio = targetPct > 0 ? actualPct / targetPct : 0;
+
+            var highThr = s.highRiskThreshold || 0.90;
+            var medThr = s.medRiskThreshold || 1.0;
+            var riskLevel = 'low', riskLabel = 'COMPLIANT';
+
+            if (ratio < highThr) { riskLevel = 'high'; riskLabel = 'PENALTY RISK — HIGH'; }
+            else if (ratio < medThr) { riskLevel = 'medium'; riskLabel = 'PENALTY RISK — MARGINAL'; }
+
+            var statusCls = riskLevel === 'low' ? 'good' : riskLevel === 'medium' ? 'warning' : 'critical';
+
+            $gaugeVal.text(actualPct.toFixed(dec) + '%').removeClass('skeleton');
+            $targetPill.text('TARGET CF: ' + targetPct.toFixed(dec) + '%');
+            $statusDot.removeClass('good warning critical').addClass(statusCls);
+            $statusText.text(riskLabel);
+
+            var gaugeMax = parseFloat(s.gaugeMax) || 50;
+            var maxArc = 251;
+            var fillPct = Math.min(actualPct / gaugeMax, 1);
+            var dashArr = (fillPct * maxArc).toFixed(1) + ', ' + maxArc;
+            $gaugeFill.attr('stroke-dasharray', dashArr);
+
+            var degVal = (fillPct * 180) - 90;
+            $needle.css('transform', 'rotate(' + degVal + 'deg)');
+
+            $riskBanner.removeClass('low medium high').addClass(riskLevel);
+            $riskText.text(riskLabel);
+
+            var targetBarH = 60;
+            var actualBarH = Math.min(Math.max((complianceRatio / 100) * targetBarH, 2), 100);
+            $barFill.css({
+                'height': actualBarH + '%',
+                'background': riskLevel === 'low'
+                    ? 'linear-gradient(180deg, var(--c-good) 0%, rgba(102,187,106,0.6) 100%)'
+                    : riskLevel === 'medium'
+                        ? 'linear-gradient(180deg, var(--c-warning) 0%, rgba(255,193,7,0.6) 100%)'
+                        : 'linear-gradient(180deg, var(--c-critical) 0%, rgba(255,82,82,0.6) 100%)'
+            });
+            $barVal.text(complianceRatio.toFixed(dec) + '%');
+
+            var margin = actualPct - targetPct;
+            var arrow = margin >= 0 ? '▲' : '▼';
+            $tooltip.html(
+                'Actual CF: ' + actualPct.toFixed(dec) + '% | Target: ' + targetPct.toFixed(dec) + '%<br>' +
+                'Compliance: ' + complianceRatio.toFixed(1) + '% — ' + arrow + ' ' + Math.abs(margin).toFixed(dec) + ' pp<br>' +
+                'No penalty risk. Operating above target.'
+            );
+
+            // Resize logic
+            function doResize() {
+                var w = $el.width();
+                var h = $el.height();
+                if (!w || !h) return;
+
+                var fromH = (h - 8) / 10.5;
+                var fromW = w / 11;
+                var fs = Math.min(fromH, fromW);
+                if (fs < 8) fs = 8;
+                if (fs > 36) fs = 36;
+
+                $el.find('.cf-card').css('font-size', fs + 'px');
+            }
+
+            doResize();
+            $el[0]._resizeFn = doResize;
+
+            // Also listen for window resize
+            $(window).on('resize', doResize);
+        }
+    </script>
+
+</body>
+
+</html>

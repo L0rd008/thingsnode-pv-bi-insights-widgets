@@ -1,0 +1,393 @@
+/* ════════════════════════════════════════════════════
+   Capacity Factor Compliance
+   ThingsBoard v4.3.0 PE | Latest Values
+   Three-section layout: Gauge | Risk | Bars
+   ════════════════════════════════════════════════════ */
+
+/* ─────────────────────────────
+   ROOT & TOKENS
+   ───────────────────────────── */
+   .cf-card {
+    --c-accent: #06F5FF;
+    --c-accent-glow: rgba(6, 245, 255, 0.12);
+    --c-accent-border: rgba(6, 245, 255, 0.4);
+    --c-accent-hover: rgba(6, 245, 255, 0.8);
+    --c-accent-glow-hover: rgba(6, 245, 255, 0.25);
+
+    --c-bg: linear-gradient(180deg, rgba(2, 10, 67, 0.95) 0%, rgba(5, 20, 50, 0.95) 100%);
+    --c-text: #FFFFFF;
+    --c-text-dim: #B0BEC5;
+    --c-text-muted: #90A4AE;
+
+    --c-good: #66BB6A;
+    --c-warning: #FFC107;
+    --c-critical: #FF5252;
+    --c-blue: #448AFF;
+
+    --c-tooltip-bg: rgba(202, 218, 221, 0.92);
+
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    width: 100%; height: 100%;
+    margin: 0;
+
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+
+    background: var(--c-bg);
+    border: 1px solid var(--c-accent-border);
+    box-shadow: 0 0 12px var(--c-accent-glow), inset 0 0 15px rgba(0, 0, 0, 0.4);
+    border-radius: 8px;
+    padding: 0.35em 0.5em 0.25em;
+    box-sizing: border-box;
+    overflow: hidden;
+    z-index: 1;
+
+    font-family: 'Roboto', sans-serif;
+    color: var(--c-text);
+    transition: border-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+.cf-card:hover {
+    border-color: var(--c-accent-hover);
+    box-shadow: 0 0 22px var(--c-accent-glow-hover), inset 0 0 8px rgba(0, 0, 0, 0.2);
+}
+
+/* ─────────────────────────────
+   HEADER — fixed, compact
+   ───────────────────────────── */
+.card-header {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    z-index: 2;
+    line-height: 1.1;
+    margin-bottom: 0.05em;
+}
+
+.card-title {
+    font-size: 0.65em; /* Slightly larger since we have room */
+    font-weight: 700;
+    color: var(--c-text);
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    width: 100%; /* Force full width */
+    text-align: center; /* Center the title */
+}
+
+.header-status {
+    display: flex;
+    align-items: center;
+    gap: 0.18em;
+    flex-shrink: 0;
+    padding-left: 0.3em;
+}
+
+.status-dot {
+    width: 0.38em;
+    height: 0.38em;
+    border-radius: 50%;
+    background-color: var(--c-text-muted);
+    display: inline-block;
+    transition: background-color 0.4s ease, box-shadow 0.4s ease;
+}
+
+.status-dot.good    { background-color: var(--c-good);     box-shadow: 0 0 5px rgba(102, 187, 106, 0.6); }
+.status-dot.warning { background-color: var(--c-warning);  box-shadow: 0 0 5px rgba(255, 193, 7, 0.6); }
+.status-dot.critical { background-color: var(--c-critical); box-shadow: 0 0 5px rgba(255, 82, 82, 0.6); animation: pulse-critical 1.8s infinite; }
+
+.status-text {
+    font-size: 0.42em;
+    font-weight: 600;
+    color: var(--c-text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    white-space: nowrap;
+}
+
+/* ─────────────────────────────
+   TOP HALF — GAUGE
+   flex:1 → equal share with bars
+   ───────────────────────────── */
+.gauge-section {
+    flex: 1 1 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 0;
+    position: relative;
+    z-index: 2;
+    overflow: hidden;
+}
+
+.gauge-svg {
+    width: 75%;
+    max-width: 11em;
+    height: auto;
+    flex-shrink: 1;
+    overflow: visible;
+}
+
+/* SVG elements */
+.gauge-bg {
+    fill: none;
+    stroke: rgba(255, 255, 255, 0.07);
+    stroke-width: 12;
+    stroke-linecap: round;
+}
+
+.gauge-fill {
+    fill: none;
+    stroke-width: 12;
+    stroke-linecap: round;
+    transition: stroke-dasharray 0.8s cubic-bezier(0.4, 0, 0.2, 1), stroke 0.5s ease;
+}
+
+.gauge-needle {
+    fill: #FFFFFF;
+    filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.5));
+    transition: transform 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+    transform-origin: 100px 100px;
+}
+
+.gauge-tick {
+    fill: var(--c-text-muted);
+    font-size: 9px;
+    font-family: 'Roboto', sans-serif;
+    font-weight: 500;
+}
+
+/* Overlay — stacked below SVG, pulled up slightly into arc */
+.gauge-overlay {
+    margin-top: -1.5em; 
+    text-align: center;
+    z-index: 5;
+    position: relative;
+    pointer-events: none;
+}
+
+.gauge-val {
+    font-size: 1.6em;
+    font-weight: 700;
+    color: #ffffff;
+    line-height: 1;
+    /* Cyan neon glow added here */
+    text-shadow: 0 0 8px rgba(6, 245, 255, 0.4), 0 0 15px rgba(6, 245, 255, 0.3);
+    white-space: nowrap;
+}
+
+.gauge-sub {
+    font-size: 0.42em;
+    font-weight: 600;
+    color: var(--c-text-muted);
+    text-transform: uppercase;
+    margin-top: 0.1em;
+    letter-spacing: 0.04em;
+}
+
+.target-pill {
+    display: inline-block;
+    margin-top: 0.25em;
+    background: rgba(255, 255, 255, 0.08); /* Reverted to light glass */
+    border: 1px solid rgba(255, 255, 255, 0.15); /* Subtle border */
+    border-radius: 1em;
+    padding: 0.15em 0.5em;
+    font-size: 0.45em;
+    font-weight: 600;
+    color: #e0e0e0; /* Off-white for better readability than dim gray */
+    white-space: nowrap;
+    backdrop-filter: blur(2px); /* nice blur effect if supported */
+}
+
+/* ─────────────────────────────
+   MIDDLE — RISK BANNER
+   Fixed-height divider
+   ───────────────────────────── */
+.risk-banner {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.25em;
+    padding: 0.28em 0.5em;
+    border-radius: 0.2em;
+    margin: 0.1em 0;
+    z-index: 2;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    transition: all 0.3s ease;
+}
+
+.risk-banner.low {
+    background: rgba(102, 187, 106, 0.1);
+    border-color: rgba(102, 187, 106, 0.3);
+}
+.risk-banner.medium {
+    background: rgba(255, 193, 7, 0.1);
+    border-color: rgba(255, 193, 7, 0.3);
+}
+.risk-banner.high {
+    background: rgba(255, 82, 82, 0.1);
+    border-color: rgba(255, 82, 82, 0.3);
+}
+
+.risk-dot {
+    width: 0.35em;
+    height: 0.35em;
+    border-radius: 50%;
+    background-color: var(--c-text-muted);
+    flex-shrink: 0;
+}
+
+.risk-banner.low .risk-dot    { background-color: var(--c-good);     box-shadow: 0 0 4px rgba(102, 187, 106, 0.5); }
+.risk-banner.medium .risk-dot { background-color: var(--c-warning);  box-shadow: 0 0 4px rgba(255, 193, 7, 0.5); }
+.risk-banner.high .risk-dot   { background-color: var(--c-critical); box-shadow: 0 0 4px rgba(255, 82, 82, 0.5); }
+
+.risk-text {
+    font-size: 0.5em;
+    font-weight: 700;
+    color: var(--c-text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    white-space: nowrap;
+}
+
+.risk-banner.low .risk-text    { color: var(--c-good); }
+.risk-banner.medium .risk-text { color: var(--c-warning); }
+.risk-banner.high .risk-text   { color: var(--c-critical); }
+
+/* ─────────────────────────────
+   BOTTOM HALF — PERFORMANCE BARS
+   flex:1 → equal share with gauge
+   ───────────────────────────── */
+.perf-section {
+    flex: 1 1 0;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: center;
+    z-index: 2;
+    min-height: 0;
+    overflow: hidden;
+    padding-bottom: 0.15em;
+}
+
+.perf-title {
+    font-size: 0.42em;
+    font-weight: 600;
+    color: var(--c-text-muted);
+    text-transform: uppercase;
+    text-align: center;
+    letter-spacing: 0.04em;
+    margin-bottom: 0.06em;
+    flex-shrink: 0;
+}
+
+.bars-row {
+    display: flex;
+    align-items: stretch;
+    justify-content: center;
+    gap: 1.5em;
+    flex: 1;
+    min-height: 0;
+}
+
+.bar-col {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 2.8em;
+    gap: 0.06em;
+}
+
+.bar-val {
+    font-size: 0.48em;
+    font-weight: 700;
+    color: var(--c-text);
+    flex: 0 0 auto;
+    white-space: nowrap;
+}
+
+.bar-track {
+    width: 100%;
+    flex: 1 1 0;
+    display: flex;
+    align-items: flex-end;
+    border-radius: 0.15em 0.15em 0 0;
+    overflow: hidden;
+    background: rgba(255, 255, 255, 0.04);
+    min-height: 0;
+}
+
+.bar-fill {
+    width: 100%;
+    border-radius: 0.15em 0.15em 0 0;
+    transition: height 0.6s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.3s ease;
+    min-height: 2px;
+}
+
+.bar-target-fill {
+    background: linear-gradient(180deg, var(--c-blue) 0%, rgba(68, 138, 255, 0.6) 100%);
+    height: 60%;
+}
+
+.bar-lbl {
+    font-size: 0.42em;
+    font-weight: 500;
+    color: var(--c-text-muted);
+    flex: 0 0 auto;
+    white-space: nowrap;
+}
+
+/* ─────────────────────────────
+   TOOLTIP — Glassmorphism
+   ───────────────────────────── */
+.tooltip-container {
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    padding: 0.4em 0.55em;
+    background-color: var(--c-tooltip-bg);
+    backdrop-filter: blur(4px);
+    transform: translateY(100%);
+    opacity: 0;
+    transition: all 0.3s ease;
+    z-index: 10;
+    pointer-events: none;
+    border-bottom-left-radius: 8px;
+    border-bottom-right-radius: 8px;
+}
+
+.cf-card:hover .tooltip-container {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+.tooltip-content {
+    font-size: 0.5em;
+    color: #1a1a2e;
+    font-weight: 600;
+    line-height: 1.3;
+}
+
+/* ─────────────────────────────
+   SKELETON & ANIMATIONS
+   ───────────────────────────── */
+.skeleton { opacity: 0.5; animation: pulse-load 1.5s infinite; }
+
+@keyframes pulse-load {
+    0%   { opacity: 0.3; }
+    50%  { opacity: 0.6; }
+    100% { opacity: 0.3; }
+}
+
+@keyframes pulse-critical {
+    0%   { box-shadow: 0 0 4px rgba(255, 82, 82, 0.6); }
+    50%  { box-shadow: 0 0 10px rgba(255, 82, 82, 0.9); }
+    100% { box-shadow: 0 0 4px rgba(255, 82, 82, 0.6); }
+}

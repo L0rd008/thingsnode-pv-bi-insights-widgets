@@ -1,0 +1,65 @@
+[
+  {
+    "id": "cardTitle",
+    "name": "Card Title",
+    "type": "text",
+    "default": "CAPACITY FACTOR COMPLIANCE",
+    "helpText": "Header title for the widget."
+  },
+  {
+    "id": "gaugeMax",
+    "name": "Gauge Max Scale (%)",
+    "type": "number",
+    "default": 50,
+    "helpText": "Maximum % for the gauge arc. Default 50% covers most solar/wind CF ranges. Increase for hydro or high-CF assets."
+  },
+  {
+    "id": "highRiskThreshold",
+    "name": "High Risk Threshold (ratio)",
+    "type": "number",
+    "default": 0.90,
+    "helpText": "If actual/target ratio falls below this, risk level is HIGH. Default 0.90 means less than 90% of target."
+  },
+  {
+    "id": "medRiskThreshold",
+    "name": "Medium Risk Threshold (ratio)",
+    "type": "number",
+    "default": 1.0,
+    "helpText": "If actual/target ratio falls below this (but above high), risk is MEDIUM. Default 1.0 means any shortfall triggers medium."
+  },
+  {
+    "id": "decimals",
+    "name": "Decimal Places",
+    "type": "number",
+    "default": 1,
+    "helpText": "Number of decimal places for displayed percentages."
+  },
+  {
+    "id": "showStatus",
+    "name": "Show Header Status",
+    "type": "boolean",
+    "default": true,
+    "helpText": "Toggle the compliance status indicator (dot + text) in the header. Disable to show only the title."
+  },
+  {
+    "id": "complianceLabel",
+    "name": "Performance Section Title",
+    "type": "text",
+    "default": "CONTRACTUAL PERFORMANCE",
+    "helpText": "Title shown above the performance comparison bars."
+  },
+  {
+    "id": "accentColor",
+    "name": "Accent Color",
+    "type": "text",
+    "default": "",
+    "helpText": "Override the border glow accent (CSS color, e.g. #06F5FF). Leave blank for default cyan."
+  },
+  {
+    "id": "tooltipText",
+    "name": "Tooltip Text",
+    "type": "text",
+    "default": "",
+    "helpText": "Static tooltip override. Leave blank for auto-generated dynamic tooltip with live compliance data."
+  }
+]
