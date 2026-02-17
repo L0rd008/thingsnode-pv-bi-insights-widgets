@@ -1,0 +1,299 @@
+/* ========================================
+   Payback Period Timeline
+   ThingsBoard v4.3.0 PE | Latest Values
+   Dynamic scaling — all sizes in em
+   ======================================== */
+.payback-card {
+    /* --- COLOR TOKENS --- */
+    --c-accent: #06F5FF;
+    --c-accent-glow: rgba(6, 245, 255, 0.12);
+    --c-accent-border: rgba(6, 245, 255, 0.4);
+    --c-accent-hover: rgba(6, 245, 255, 0.8);
+    --c-accent-glow-hover: rgba(6, 245, 255, 0.25);
+    --c-bg: linear-gradient(180deg, rgba(2, 10, 67, 0.95) 0%, rgba(5, 20, 50, 0.95) 100%);
+    --c-text: #FFFFFF;
+    --c-text-dim: #B0BEC5;
+    --c-text-muted: #90A4AE;
+    --c-tooltip-bg: rgba(202, 218, 221, 0.9);
+    --c-disc: #546E7A;
+
+    /* --- LAYOUT: Absolute fill --- */
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: 100%;
+    height: 100%;
+    margin: 0;
+
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+
+    background: var(--c-bg);
+    border: 1px solid var(--c-accent-border);
+    box-shadow: 0 0 12px var(--c-accent-glow), inset 0 0 15px rgba(0, 0, 0, 0.4);
+    border-radius: 8px;
+    padding: 0.5em 0.7em;
+    box-sizing: border-box;
+    overflow: hidden;
+    z-index: 1;
+
+    font-family: 'Roboto', sans-serif;
+    color: var(--c-text);
+    transition: border-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+/* --- HOVER GLOW --- */
+.payback-card:hover {
+    border-color: var(--c-accent-hover);
+    box-shadow: 0 0 22px var(--c-accent-glow-hover), inset 0 0 8px rgba(0, 0, 0, 0.2);
+}
+
+/* ===================
+   HEADER
+   =================== */
+.card-header {
+    flex: 0 0 auto;
+    z-index: 2;
+    line-height: 1.1;
+    margin-bottom: 0.15em;
+}
+
+.card-title {
+    font-size: 0.7em;
+    font-weight: 700;
+    color: var(--c-text);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* ===================
+   TIMELINE AREA
+   Layout: label-top → track → label-bottom → axis
+   =================== */
+.timeline-area {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    z-index: 2;
+    min-height: 0;
+}
+
+/* ===================
+   LABEL ZONES
+   Each zone is a relative container where the
+   marker-label sits at an absolute horizontal %
+   =================== */
+.label-zone {
+    position: relative;
+    flex: 0 0 auto;
+    height: 1.4em;
+    min-height: 0;
+}
+
+.marker-label-container {
+    position: absolute;
+    transform: translateX(-50%);
+    text-align: center;
+    transition: left 0.5s ease;
+    white-space: nowrap;
+    pointer-events: none;
+    z-index: 2;
+}
+
+/* Top labels: align bottom of label to bottom of zone */
+.label-zone-top .marker-label-container {
+    bottom: 0;
+}
+
+/* Bottom labels: align top of label to top of zone */
+.label-zone-bottom .marker-label-container {
+    top: 0;
+}
+
+.marker-value-text {
+    font-size: 0.65em;
+    font-weight: 700;
+    color: var(--c-accent);
+    line-height: 1.1;
+}
+
+.marker-value-text.text-grey {
+    color: var(--c-text-muted);
+}
+
+.marker-sub-text {
+    font-size: 0.42em;
+    color: var(--c-text-dim);
+    font-weight: 400;
+    line-height: 1.1;
+}
+
+/* ===================
+   TRACK
+   =================== */
+.track-container {
+    position: relative;
+    height: 0.5em;
+    width: 100%;
+    flex: 0 0 auto;
+    margin: 0.15em 0;
+}
+
+.track-bg {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(255, 255, 255, 0.1);
+    border-radius: 0.25em;
+}
+
+.track-fill {
+    position: absolute;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    background: linear-gradient(90deg, rgba(6, 245, 255, 0.1) 0%, rgba(6, 245, 255, 0.45) 100%);
+    border-radius: 0.25em;
+    width: 0%;
+    transition: width 0.5s ease;
+}
+
+/* ===================
+   DOTS
+   =================== */
+.dot {
+    position: absolute;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    transition: left 0.5s ease;
+    z-index: 5;
+}
+
+.simple-dot .dot-core {
+    width: 0.6em;
+    height: 0.6em;
+    background-color: var(--c-accent);
+    border-radius: 50%;
+    border: 2px solid var(--c-text);
+    box-shadow: 0 0 8px var(--c-accent);
+}
+
+.simple-dot .dot-glow {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 1em;
+    height: 1em;
+    background-color: rgba(6, 245, 255, 0.4);
+    border-radius: 50%;
+    animation: dot-pulse 2s infinite;
+}
+
+.discounted-dot .dot-core {
+    width: 0.45em;
+    height: 0.45em;
+    background-color: var(--c-disc);
+    border: 1px solid var(--c-text-muted);
+    border-radius: 50%;
+}
+
+/* ===================
+   AXIS
+   =================== */
+.axis-numbers {
+    display: flex;
+    justify-content: space-between;
+    flex: 0 0 auto;
+}
+
+.axis-numbers span {
+    font-size: 0.4em;
+    color: var(--c-text-muted);
+    text-align: center;
+    min-width: 0.8em;
+}
+
+/* ===================
+   ANIMATIONS
+   =================== */
+@keyframes dot-pulse {
+    0% {
+        transform: translate(-50%, -50%) scale(1);
+        opacity: 0.6;
+    }
+
+    70% {
+        transform: translate(-50%, -50%) scale(1.8);
+        opacity: 0;
+    }
+
+    100% {
+        transform: translate(-50%, -50%) scale(1);
+        opacity: 0;
+    }
+}
+
+/* ===================
+   TOOLTIP
+   =================== */
+.tooltip-container {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    padding: 0.4em 0.6em;
+    background-color: var(--c-tooltip-bg);
+    backdrop-filter: blur(4px);
+    transform: translateY(100%);
+    opacity: 0;
+    transition: all 0.3s ease;
+    z-index: 10;
+    pointer-events: none;
+    border-bottom-left-radius: 8px;
+    border-bottom-right-radius: 8px;
+}
+
+.payback-card:hover .tooltip-container {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+.tooltip-content {
+    font-size: 0.55em;
+    color: #000;
+    font-weight: 600;
+    line-height: 1.3;
+}
+
+/* ===================
+   LOADING SKELETON
+   =================== */
+.skeleton {
+    opacity: 0.5;
+    animation: pulse-load 1.5s infinite;
+}
+
+@keyframes pulse-load {
+    0% {
+        opacity: 0.3;
+    }
+
+    50% {
+        opacity: 0.6;
+    }
+
+    100% {
+        opacity: 0.3;
+    }
+}

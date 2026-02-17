@@ -1,0 +1,58 @@
+[
+  {
+    "id": "widgetTitle",
+    "name": "Widget Title",
+    "type": "text",
+    "default": "PAYBACK PERIOD"
+  },
+  {
+    "id": "maxYears",
+    "name": "Scale Maximum (Years)",
+    "type": "number",
+    "default": 10,
+    "helpText": "Maximum value on the timeline axis. Axis labels are generated dynamically."
+  },
+  {
+    "id": "unit",
+    "name": "Value Unit",
+    "type": "text",
+    "default": "Years",
+    "helpText": "Unit label shown after the value (e.g. Years, Months)."
+  },
+  {
+    "id": "decimals",
+    "name": "Decimal Places",
+    "type": "number",
+    "default": 1,
+    "min": 0,
+    "step": 1,
+    "helpText": "Number of decimal places for the payback values."
+  },
+  {
+    "id": "simpleLabel",
+    "name": "Simple Payback Label",
+    "type": "text",
+    "default": "Simple Payback",
+    "helpText": "Sub-label under the simple payback marker."
+  },
+  {
+    "id": "discountedLabel",
+    "name": "Discounted Payback Label",
+    "type": "text",
+    "default": "Discounted",
+    "helpText": "Sub-label under the discounted payback marker."
+  },
+  {
+    "id": "tooltipText",
+    "name": "Tooltip Content",
+    "type": "text",
+    "helpText": "Hover tooltip text. Leave empty to hide.",
+    "default": "Time required to recover the initial investment (CAPEX) through energy savings. Lower is better."
+  },
+  {
+    "id": "accentColor",
+    "name": "Custom Accent Color (Optional)",
+    "type": "text",
+    "helpText": "Override theme accent color, e.g. #FF6B35. Leave empty for default cyan."
+  }
+]
