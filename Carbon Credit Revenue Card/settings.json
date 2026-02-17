@@ -1,0 +1,128 @@
+[
+    {
+        "id": "title",
+        "name": "Widget Title",
+        "type": "text",
+        "default": "CARBON CREDIT REVENUE"
+    },
+    {
+        "id": "icon",
+        "name": "Header Icon",
+        "type": "text",
+        "default": "💰",
+        "helpText": "Emoji or symbol shown before the title."
+    },
+    {
+        "id": "mainLabel",
+        "name": "Main Value Label",
+        "type": "text",
+        "default": "ANNUAL VALUE",
+        "helpText": "Label shown below the main number."
+    },
+    {
+        "id": "barLabel",
+        "name": "Bar Section Label",
+        "type": "text",
+        "default": "LIFETIME POTENTIAL VALUE",
+        "helpText": "Label above the progress bar."
+    },
+    {
+        "id": "currency",
+        "name": "Currency Symbol",
+        "type": "text",
+        "default": "LKR"
+    },
+    {
+        "id": "annualFactor",
+        "name": "Annual Revenue Multiplier",
+        "type": "number",
+        "default": 15,
+        "helpText": "Revenue per input unit (e.g. LKR per kWh). Applied to the raw value."
+    },
+    {
+        "id": "lifetimeFactor",
+        "name": "Lifetime Potential Multiplier",
+        "type": "number",
+        "default": 350,
+        "helpText": "Multiplier for lifetime projection. Applied to the raw value."
+    },
+    {
+        "id": "divider",
+        "name": "Input Value Divider",
+        "type": "number",
+        "default": 1,
+        "helpText": "Divide raw telemetry value by this number before calculations."
+    },
+    {
+        "id": "decimals",
+        "name": "Decimal Places",
+        "type": "number",
+        "default": 0,
+        "min": 0,
+        "step": 1
+    },
+    {
+        "id": "autoScale",
+        "name": "Auto-Scale Currency",
+        "type": "switch",
+        "default": true,
+        "helpText": "Automatically abbreviate large values (K, M, B) for readability."
+    },
+    {
+        "id": "showDelta",
+        "name": "Show Delta vs Target",
+        "type": "switch",
+        "default": true,
+        "helpText": "Show ▲/▼ percentage change vs a target value (2nd data source)."
+    },
+    {
+        "id": "deltaLabel",
+        "name": "Delta Label",
+        "type": "text",
+        "default": "vs Target"
+    },
+    {
+        "id": "showStatus",
+        "name": "Show Status Badge",
+        "type": "switch",
+        "default": true,
+        "helpText": "Show a threshold-based status indicator (On Track / Warning / Critical) based on annual revenue."
+    },
+    {
+        "id": "thresholdWarning",
+        "name": "Warning Threshold",
+        "type": "number",
+        "helpText": "Annual revenue below this value shows Warning status. Leave empty to hide status."
+    },
+    {
+        "id": "thresholdCritical",
+        "name": "Critical Threshold",
+        "type": "number",
+        "helpText": "Annual revenue below this value shows Critical status. Leave empty to hide status."
+    },
+    {
+        "id": "subtitle",
+        "name": "Footer Left Text",
+        "type": "text",
+        "default": "Estimated"
+    },
+    {
+        "id": "footerNote",
+        "name": "Footer Right Text",
+        "type": "text",
+        "default": "* Based on verified standards"
+    },
+    {
+        "id": "tooltipText",
+        "name": "Tooltip Content",
+        "type": "text",
+        "helpText": "Hover tooltip text. Leave empty to hide.",
+        "default": "Estimated carbon credit revenue based on energy generation and verified carbon standards."
+    },
+    {
+        "id": "accentColor",
+        "name": "Custom Accent Color (Optional)",
+        "type": "text",
+        "helpText": "Override theme accent color, e.g. #FF6B35. Leave empty for default green."
+    }
+]
