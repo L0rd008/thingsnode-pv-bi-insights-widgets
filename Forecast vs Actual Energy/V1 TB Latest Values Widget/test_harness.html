@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Forecast vs. Actual Energy — Test Harness</title>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js"></script>
+    <style>
+        *,
+        *::before,
+        *::after {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            background: #0a0a1e;
+            color: #ccc;
+            font-family: 'Roboto', sans-serif;
+            padding: 24px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 24px;
+        }
+
+        h1 {
+            color: #06F5FF;
+            font-size: 18px;
+            margin-bottom: 8px;
+        }
+
+        .controls {
+            display: flex;
+            gap: 16px;
+            align-items: center;
+            background: rgba(255, 255, 255, 0.05);
+            padding: 12px 20px;
+            border-radius: 8px;
+        }
+
+        .controls label {
+            font-size: 13px;
+            color: #90A4AE;
+        }
+
+        .controls input[type=range] {
+            width: 160px;
+        }
+
+        .controls span {
+            font-size: 13px;
+            color: #FFC107;
+            min-width: 48px;
+        }
+
+        .test-container {
+            position: relative;
+            border: 1px dashed rgba(6, 245, 255, 0.2);
+            overflow: hidden;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>Forecast vs. Actual Energy — Test Harness</h1>
+
+    <div class="controls">
+        <label>Width</label>
+        <input type="range" id="widthSlider" min="280" max="1200" value="650">
+        <span id="widthVal">650px</span>
+
+        <label>Height</label>
+        <input type="range" id="heightSlider" min="180" max="600" value="340">
+        <span id="heightVal">340px</span>
+    </div>
+
+    <div class="test-container" id="widgetHost" style="width:650px;height:340px;">
+        <!-- Widget HTML injected below via inline -->
+    </div>
+
+    <!-- ═══ INLINE WIDGET CSS ═══ -->
+    <link rel="stylesheet" href=".css">
+
+    <script>
+        (function () {
+            /* ── Load widget HTML ── */
+            $.get('.html', function (html) {
+                $('#widgetHost').html(html);
+                bootWidget();
+            });
+
+            /* ── Resize controls ── */
+            var $host = $('#widgetHost');
+            $('#widthSlider').on('input', function () {
+                var v = $(this).val();
+                $host.css('width', v + 'px');
+                $('#widthVal').text(v + 'px');
+                if (typeof self !== 'undefined' && self.onResize) self.onResize();
+            });
+            $('#heightSlider').on('input', function () {
+                var v = $(this).val();
+                $host.css('height', v + 'px');
+                $('#heightVal').text(v + 'px');
+                if (typeof self !== 'undefined' && self.onResize) self.onResize();
+            });
+
+            /* ── Boot widget with mock TB context ── */
+            function bootWidget() {
+                window.self = {
+                    ctx: {
+                        $container: $('#widgetHost'),
+                        $widget: $('#widgetHost'),
+                        settings: {
+                            widgetTitle: 'FORECAST vs. ACTUAL ENERGY (30-DAY MWh)',
+                            unitLabel: 'MWh',
+                            windowDays: 30,
+                            actualEnergyKey: 'total_generation',
+                            forecastP50Key: 'forecast_p50_daily',
+                            forecastP75Key: 'forecast_p75_daily',
+                            forecastP90Key: 'forecast_p90_daily',
+                            p50AttributeKey: 'p50_energy',
+                            p75AttributeKey: 'p75_energy',
+                            p90AttributeKey: 'p90_energy',
+                            baseDailyEnergy: 4110,
+                            decimals: 1,
+                            showConfidenceBand: true
+                        },
+                        datasources: [{
+                            entityId: 'mock-device-001',
+                            entityType: 'DEVICE'
+                        }],
+                        /* Mock HTTP — returns empty to trigger attribute fallback */
+                        http: {
+                            get: function () {
+                                return {
+                                    subscribe: function (success, error) {
+                                        /* Simulate: no forecast telemetry → triggers attribute fallback */
+                                        if (error) error({ status: 404 });
+                                    }
+                                };
+                            }
+                        },
+                        /* Mock attribute service — returns Finance_Dummy attrs */
+                        attributeService: {
+                            getEntityAttributes: function (entity, scope, keys) {
+                                return {
+                                    subscribe: function (success) {
+                                        /* Return the annual P-values from Finance_Dummy */
+                                        var mockAttrs = [
+                                            { key: 'p50_energy', value: 1500000 },
+                                            { key: 'p75_energy', value: 1420000 },
+                                            { key: 'p90_energy', value: 1350000 }
+                                        ];
+                                        /* Filter to requested keys */
+                                        var filtered = mockAttrs.filter(function (a) {
+                                            return keys.indexOf(a.key) !== -1;
+                                        });
+                                        if (success) success(filtered);
+                                    }
+                                };
+                            }
+                        },
+                        detectChanges: function () { },
+                        data: []
+                    },
+                    onInit: null,
+                    onDataUpdated: null,
+                    onResize: null,
+                    onDestroy: null
+                };
+
+                /* Load widget JS */
+                $.getScript('.js', function () {
+                    if (self.onInit) self.onInit();
+                });
+            }
+        })();
+    </script>
+</body>
+
+</html>

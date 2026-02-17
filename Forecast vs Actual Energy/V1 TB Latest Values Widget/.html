@@ -1,0 +1,49 @@
+<div class="fvae-card">
+
+    <!-- ═══ HEADER ═══ -->
+    <div class="card-header">
+        <div class="card-title js-title">FORECAST vs. ACTUAL ENERGY (30-DAY MWh)</div>
+        <div class="header-status">
+            <span class="status-dot js-status-dot"></span>
+            <span class="status-text js-status-text">--</span>
+        </div>
+    </div>
+
+    <!-- ═══ BODY — Chart.js Canvas ═══ -->
+    <div class="chart-body">
+        <div class="y-axis-title js-y-title">ENERGY (MWh)</div>
+        <div class="chart-container">
+            <canvas class="js-canvas"></canvas>
+        </div>
+    </div>
+
+    <!-- ═══ FOOTER — Legend ═══ -->
+    <div class="card-footer">
+        <div class="legend-item">
+            <div class="legend-swatch line-actual"></div>
+            <span class="legend-label js-legend-actual">Actual Energy</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-swatch line-p50"></div>
+            <span class="legend-label js-legend-p50">P50 Forecast</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-swatch line-p75"></div>
+            <span class="legend-label js-legend-p75">P75 Forecast</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-swatch line-p90"></div>
+            <span class="legend-label js-legend-p90">P90 Forecast</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-swatch band-fill"></div>
+            <span class="legend-label">Confidence Band (P50-P90)</span>
+        </div>
+    </div>
+
+    <!-- ═══ TOOLTIP — Glassmorphism ═══ -->
+    <div class="tooltip-container">
+        <div class="tooltip-content js-tooltip"></div>
+    </div>
+
+</div>

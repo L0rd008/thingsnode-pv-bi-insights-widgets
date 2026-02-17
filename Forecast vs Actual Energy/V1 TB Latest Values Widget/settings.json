@@ -1,0 +1,107 @@
+[
+    {
+        "id": "widgetTitle",
+        "name": "Widget Title",
+        "type": "text",
+        "default": "FORECAST vs. ACTUAL ENERGY (30-DAY MWh)",
+        "helpText": "Header title for the widget."
+    },
+    {
+        "id": "unitLabel",
+        "name": "Energy Unit",
+        "type": "text",
+        "default": "MWh",
+        "helpText": "Unit displayed on the Y-axis and in tooltips."
+    },
+    {
+        "id": "windowDays",
+        "name": "Rolling Window (Days)",
+        "type": "number",
+        "default": 30,
+        "helpText": "Number of past days to display. Common: 7, 14, 30, 90."
+    },
+    {
+        "id": "actualEnergyKey",
+        "name": "Actual Energy Telemetry Key",
+        "type": "text",
+        "default": "total_generation",
+        "helpText": "Telemetry key for actual daily energy production."
+    },
+    {
+        "id": "forecastP50Key",
+        "name": "P50 Forecast Telemetry Key",
+        "type": "text",
+        "default": "forecast_p50_daily",
+        "helpText": "Telemetry key for daily P50 forecast. Leave default if not yet available."
+    },
+    {
+        "id": "forecastP75Key",
+        "name": "P75 Forecast Telemetry Key",
+        "type": "text",
+        "default": "forecast_p75_daily",
+        "helpText": "Telemetry key for daily P75 forecast."
+    },
+    {
+        "id": "forecastP90Key",
+        "name": "P90 Forecast Telemetry Key",
+        "type": "text",
+        "default": "forecast_p90_daily",
+        "helpText": "Telemetry key for daily P90 forecast."
+    },
+    {
+        "id": "p50AttributeKey",
+        "name": "P50 Annual Energy Attribute",
+        "type": "text",
+        "default": "p50_energy",
+        "helpText": "Server attribute key for annual P50 energy (kWh). Used as fallback to derive daily forecasts."
+    },
+    {
+        "id": "p75AttributeKey",
+        "name": "P75 Annual Energy Attribute",
+        "type": "text",
+        "default": "p75_energy",
+        "helpText": "Server attribute key for annual P75 energy (kWh)."
+    },
+    {
+        "id": "p90AttributeKey",
+        "name": "P90 Annual Energy Attribute",
+        "type": "text",
+        "default": "p90_energy",
+        "helpText": "Server attribute key for annual P90 energy (kWh)."
+    },
+    {
+        "id": "baseDailyEnergy",
+        "name": "Baseline Daily Energy (kWh)",
+        "type": "number",
+        "default": 4110,
+        "helpText": "Fallback daily energy baseline in kWh for pure simulation mode (when no attributes or telemetry are available). Divided by 1000 for MWh display."
+    },
+    {
+        "id": "decimals",
+        "name": "Decimal Places",
+        "type": "number",
+        "default": 1,
+        "helpText": "Number of decimal places for tooltip and Y-axis values."
+    },
+    {
+        "id": "showConfidenceBand",
+        "name": "Show Confidence Band",
+        "type": "switch",
+        "default": true,
+        "helpText": "Toggle the shaded area between P50 and P90 on the chart."
+    },
+    {
+        "id": "accentColor",
+        "name": "Accent Color",
+        "type": "text",
+        "default": "",
+        "helpText": "Override the card border glow accent (CSS color). Leave blank for default cyan."
+    },
+    {
+        "id": "tooltipText",
+        "name": "Tooltip Text",
+        "type": "text",
+        "default": "",
+        "helpText": "Static tooltip override. Leave blank for auto-generated risk summary."
+    }
+]
