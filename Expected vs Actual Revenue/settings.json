@@ -1,0 +1,90 @@
+[
+  {
+    "id": "widgetTitle",
+    "name": "Chart Title",
+    "type": "text",
+    "default": "EXPECTED vs. ACTUAL REVENUE",
+    "helpText": "Header title for the widget."
+  },
+  {
+    "id": "seriesALabel",
+    "name": "Series A Label (Baseline)",
+    "type": "text",
+    "default": "Expected (P90)",
+    "helpText": "Legend label for the first datasource (expected/baseline)."
+  },
+  {
+    "id": "seriesBLabel",
+    "name": "Series B Label (Current)",
+    "type": "text",
+    "default": "Actual Revenue",
+    "helpText": "Legend label for the second datasource (actual)."
+  },
+  {
+    "id": "unit",
+    "name": "Display Unit (e.g. M, kWh)",
+    "type": "text",
+    "default": "M",
+    "helpText": "Unit suffix appended to values (M for millions, K for thousands, etc.)."
+  },
+  {
+    "id": "currency",
+    "name": "Currency Symbol",
+    "type": "text",
+    "default": "$",
+    "helpText": "Currency prefix used in axis title and tooltip (e.g. $, LKR, EUR)."
+  },
+  {
+    "id": "decimals",
+    "name": "Decimal Places",
+    "type": "number",
+    "default": 2,
+    "helpText": "Number of decimal places for bar values and variance badges."
+  },
+  {
+    "id": "colorA",
+    "name": "Series A Color (Hex)",
+    "type": "text",
+    "default": "#5C6BC0",
+    "helpText": "Bar color for expected/baseline series."
+  },
+  {
+    "id": "colorB",
+    "name": "Series B Color (Hex)",
+    "type": "text",
+    "default": "#00E5FF",
+    "helpText": "Bar color for actual series."
+  },
+  {
+    "id": "targetLogic",
+    "name": "Good Performance Logic",
+    "type": "select",
+    "default": "Higher Actual is Better",
+    "items": [
+      { "value": "Higher Actual is Better", "label": "Higher Actual is Better" },
+      { "value": "Lower Actual is Better", "label": "Lower Actual is Better" }
+    ],
+    "helpText": "Determines whether exceeding the baseline is positive (revenue) or negative (cost). Controls badge and status dot colors."
+  },
+  {
+    "id": "maxBars",
+    "name": "Max Months to Show",
+    "type": "number",
+    "default": 6,
+    "helpText": "Maximum number of monthly bar pairs displayed. Older months are trimmed first."
+  },
+  {
+    "id": "accentColor",
+    "name": "Accent Color",
+    "type": "text",
+    "default": "",
+    "helpText": "Override the card border glow accent (CSS color, e.g. #06F5FF). Leave blank for default cyan."
+  },
+  {
+    "id": "tooltipText",
+    "name": "Tooltip Text",
+    "type": "text",
+    "default": "",
+    "helpText": "Static tooltip override. Leave blank for auto-generated dynamic tooltip with live variance data."
+  }
+]
