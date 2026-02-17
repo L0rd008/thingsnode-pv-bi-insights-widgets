@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Insurance Claimable Events — Visual Test</title>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;600;700&family=Roboto+Mono:wght@400;700&display=swap"
+        rel="stylesheet">
+    <style id="widget-css"></style>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: #0d1117;
+            font-family: 'Roboto', sans-serif;
+            color: #fff;
+            padding: 24px;
+        }
+
+        h1 {
+            font-size: 18px;
+            margin-bottom: 16px;
+            color: #8b949e;
+        }
+
+        .test-grid {
+            display: flex;
+            flex-direction: column;
+            gap: 28px;
+            margin-bottom: 40px;
+        }
+
+        .test-cell {
+            position: relative;
+            border: 1px dashed rgba(255, 255, 255, 0.15);
+        }
+
+        .test-cell::after {
+            content: attr(data-label);
+            position: absolute;
+            bottom: -18px;
+            left: 0;
+            font-size: 11px;
+            color: #8b949e;
+        }
+
+        .controls {
+            margin-bottom: 20px;
+            display: flex;
+            gap: 16px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .controls label {
+            font-size: 13px;
+            color: #8b949e;
+        }
+
+        .controls input[type=range] {
+            width: 160px;
+        }
+
+        .controls span {
+            font-size: 12px;
+            color: #58a6ff;
+            min-width: 60px;
+        }
+
+        #custom-cell {
+            transition: width 0.2s, height 0.2s;
+        }
+    </style>
+</head>
+
+<body>
+
+    <h1>Insurance Claimable Events Summary v2.0 — Visual Test Harness</h1>
+
+    <div class="controls">
+        <label>Width: <input type="range" id="rW" min="400" max="1000" value="650"><span id="vW">650px</span></label>
+        <label>Height: <input type="range" id="rH" min="150" max="500" value="300"><span id="vH">300px</span></label>
+    </div>
+
+    <div class="test-grid">
+        <!-- Resizable — Multiple claims -->
+        <div class="test-cell" id="custom-cell" data-label="Resizable — 5 Claims (Mixed Statuses)"
+            style="width:650px;height:300px;" data-scenario="mixed"></div>
+
+        <!-- All Approved -->
+        <div class="test-cell" data-label="600×260 — All Approved (HEALTHY)" style="width:600px;height:260px;"
+            data-scenario="allApproved"></div>
+
+        <!-- Empty -->
+        <div class="test-cell" data-label="550×200 — No Claims (CLEAR)" style="width:550px;height:200px;"
+            data-scenario="empty"></div>
+    </div>
+
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    <script>
+        var scenarios = {
+            mixed: {
+                settings: { enableDemoData: false },
+                data: [
+                    { date: '2026-02-02', eventType: 'Storm Damage (Monsoon)', energyLost: 15.2, amount: 350000, status: 'Pending' },
+                    { date: '2026-01-14', eventType: 'Inverter Fire', energyLost: 28.5, amount: 650000, status: 'Approved' },
+                    { date: '2025-12-17', eventType: 'CEB Grid Failure', energyLost: 5.8, amount: 125000, status: 'Rejected' },
+                    { date: '2025-11-03', eventType: 'Lightning Strike', energyLost: 42.1, amount: 820000, status: 'Approved' },
+                    { date: '2025-10-20', eventType: 'Flood Damage', energyLost: 18.9, amount: 410000, status: 'Pending' }
+                ]
+            },
+            allApproved: {
+                settings: { enableDemoData: false },
+                data: [
+                    { date: '2026-01-10', eventType: 'Panel Hail Damage', energyLost: 12.4, amount: 280000, status: 'Approved' },
+                    { date: '2025-12-05', eventType: 'Wind Turbine Blade', energyLost: 55.0, amount: 1200000, status: 'Approved' }
+                ]
+            },
+            empty: {
+                settings: { enableDemoData: false },
+                data: []
+            }
+        };
+
+        // Load CSS
+        fetch('.css').then(function (r) { return r.text(); }).then(function (css) {
+            document.getElementById('widget-css').textContent = css;
+        });
+
+        // Load HTML + JS
+        Promise.all([
+            fetch('.html').then(function (r) { return r.text(); }),
+            fetch('.js').then(function (r) { return r.text(); })
+        ]).then(function (results) {
+            var html = results[0];
+            var jsCode = results[1];
+
+            document.querySelectorAll('.test-cell').forEach(function (cell) {
+                cell.innerHTML = html;
+                var scenarioKey = cell.dataset.scenario;
+                var scen = scenarios[scenarioKey] || scenarios.mixed;
+                runWidget(cell, scen, jsCode);
+            });
+
+            var rW = document.getElementById('rW');
+            var rH = document.getElementById('rH');
+            var vW = document.getElementById('vW');
+            var vH = document.getElementById('vH');
+            var customCell = document.getElementById('custom-cell');
+
+            function updateSize() {
+                customCell.style.width = rW.value + 'px';
+                customCell.style.height = rH.value + 'px';
+                vW.textContent = rW.value + 'px';
+                vH.textContent = rH.value + 'px';
+                if (customCell._resizeFn) customCell._resizeFn();
+            }
+            rW.addEventListener('input', updateSize);
+            rH.addEventListener('input', updateSize);
+        });
+
+        function runWidget(cell, scenario, jsCode) {
+            var $cell = $(cell);
+            var baseSettings = {
+                widgetTitle: 'INSURANCE CLAIMABLE EVENTS SUMMARY',
+                currencySym: 'LKR',
+                energyUnit: 'MWh',
+                enableDemoData: false
+            };
+            if (scenario.settings) {
+                for (var key in scenario.settings) {
+                    baseSettings[key] = scenario.settings[key];
+                }
+            }
+
+            var self = {};
+            self.ctx = {
+                $container: $cell,
+                settings: baseSettings,
+                data: [{ data: [[Date.now(), JSON.stringify(scenario.data)]] }],
+                detectChanges: function () { }
+            };
+
+            try {
+                var fn = new Function('self', jsCode);
+                fn(self);
+            } catch (e) {
+                console.error('Widget JS error:', e);
+            }
+
+            cell._resizeFn = function () {
+                if (self.onResize) self.onResize();
+            };
+
+            $(window).on('resize', function () {
+                if (self.onResize) self.onResize();
+            });
+        }
+    </script>
+
+</body>
+
+</html>
