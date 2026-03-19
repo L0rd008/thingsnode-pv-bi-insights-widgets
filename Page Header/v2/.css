@@ -1,6 +1,7 @@
 /* ════════════════════════════════════════════════════════
    Page Header — Minimal Single-Row Design
    ThingsBoard v4.3.0 PE | Static Widget
+   Adapted for root-state + <tb-dashboard-state> architecture
    Dynamic scaling via JS font-size
    All sizes in em — one root font-size controls all
    ════════════════════════════════════════════════════════ */
@@ -56,7 +57,7 @@
    ───────────────────────────── */
 .header-title {
     flex: 0 0 auto;
-    font-size: 0.85em;
+    font-size: 1.2em;
     font-weight: 900;
     letter-spacing: 0.04em;
     text-transform: uppercase;
@@ -84,7 +85,7 @@
 .tab {
     position: relative;
     color: var(--c-text-dim);
-    font-size: 0.68em;
+    font-size: 0.7em;
     font-weight: 700;
     letter-spacing: 0.04em;
     text-transform: uppercase;
@@ -117,11 +118,10 @@
     color: var(--c-text-muted);
     opacity: 0.4;
     pointer-events: none;
-    font-size: 1.2em;
+    font-size: 1.4em;
 }
 
 .tab:first-child::before,
-.tab.first-visible::before,
 .tab.active::before {
     display: none;
 }
@@ -143,8 +143,20 @@
     transform: scaleX(1);
 }
 
+/* ─── Active tab — always visible, highlighted ─── */
 .tab.active {
-    display: none !important;
+    color: var(--c-accent);
+    opacity: 1;
+    cursor: default;
+    text-shadow: 0 0 8px rgba(6, 245, 255, 0.5);
+}
+
+.tab.active::after {
+    transform: scaleX(1);
+    opacity: 1;
+    height: 2px;
+    background: var(--c-accent);
+    box-shadow: 0 0 6px rgba(6, 245, 255, 0.7);
 }
 
 /* ─────────────────────────────
@@ -183,7 +195,7 @@
 }
 
 .clock-time {
-    font-size: 0.72em;
+    font-size: 0.7em;
     font-weight: 700;
     letter-spacing: 0.03em;
     color: var(--c-text);
@@ -191,7 +203,7 @@
 }
 
 .clock-date {
-    font-size: 0.5em;
+    font-size: 0.6em;
     font-weight: 500;
     letter-spacing: 0.02em;
     color: var(--c-text-muted);

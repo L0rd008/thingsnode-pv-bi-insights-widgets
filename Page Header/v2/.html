@@ -1,0 +1,39 @@
+<!-- ═══════════════════════════════════════════════════════════ -->
+<!-- CEB Dashboard — Navbar (Static Widget)                     -->
+<!-- Based on existing GP Dashboard navbar, adapted for          -->
+<!-- root-state architecture with <tb-dashboard-state> loader    -->
+<!--                                                             -->
+<!-- Settings Form fields:                                       -->
+<!--   titleText       (Text)   - Title prefix                  -->
+<!--   timezoneLabel   (Text)   - e.g. "UTC+05:30"              -->
+<!--   timezoneOffset  (Number) - minutes from UTC, e.g. 330    -->
+<!--   rootState       (Text)   - default state ID              -->
+<!-- ═══════════════════════════════════════════════════════════ -->
+
+<div class="page-header" data-root-state="energy_prod" data-tz-label="UTC+05:30" data-tz-offset="330">
+
+    <div class="header-title"></div>
+
+    <div class="header-tabs">
+        <div class="tab" data-state="energy_prod" data-mode="1"
+             data-title="Energy Production">Energy &amp; Yield</div>
+        <div class="tab" data-state="forecasts" data-mode="2"
+             data-title="Forecasts &amp; Risk">Forecasts &amp; Risk</div>
+        <div class="tab" data-state="financial" data-mode="3"
+             data-title="Financial Performance">Financials</div>
+        <div class="tab" data-state="esg" data-mode="4"
+             data-title="ESG &amp; Carbon Impact">ESG &amp; Carbon</div>
+        <div class="tab" data-state="grid_loss" data-mode="5"
+             data-title="Grid &amp; Availability">Grid &amp; Losses</div>
+        <div class="tab" data-state="portfolio" data-mode="6"
+             data-title="Portfolio Intelligence">Portfolio</div>
+    </div>
+
+    <div class="header-sep"></div>
+
+    <div class="header-clock">
+        <span class="clock-time"></span>
+        <span class="clock-date"></span>
+    </div>
+
+</div>

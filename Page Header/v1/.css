@@ -1,0 +1,211 @@
+/* ════════════════════════════════════════════════════════
+   Page Header — Minimal Single-Row Design
+   ThingsBoard v4.3.0 PE | Static Widget
+   Dynamic scaling via JS font-size
+   All sizes in em — one root font-size controls all
+   ════════════════════════════════════════════════════════ */
+
+/* ─────────────────────────────
+   DESIGN TOKENS
+   ───────────────────────────── */
+.page-header {
+    --c-bg: rgba(2, 10, 67, 0.90);
+    --c-bg-deep: rgba(5, 20, 50, 0.95);
+
+    --c-accent: #06F5FF;
+    --c-accent-glow: rgba(6, 245, 255, 0.15);
+
+    --c-text: #FFFFFF;
+    --c-text-dim: #CADADD;
+    --c-text-muted: #90A4AE;
+
+    --transition: 0.25s cubic-bezier(0.4, 0.0, 0.2, 1);
+}
+
+/* ─────────────────────────────
+   ROOT — single horizontal row
+   ───────────────────────────── */
+.page-header,
+.page-header * {
+    box-sizing: border-box;
+}
+
+.page-header {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: 100%;
+    height: 100%;
+    margin: 0;
+
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+
+    background: linear-gradient(180deg, var(--c-bg) 0%, var(--c-bg-deep) 100%);
+    padding: 0 0.8em;
+    font-family: 'Roboto', Arial, sans-serif;
+    color: var(--c-text);
+    overflow: hidden;
+}
+
+/* ─────────────────────────────
+   TITLE (left)
+   ───────────────────────────── */
+.header-title {
+    flex: 0 0 auto;
+    font-size: 0.85em;
+    font-weight: 900;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: var(--c-text);
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+    padding-right: 0.8em;
+    transition: opacity 0.15s ease;
+}
+
+/* ─────────────────────────────
+   TABS (middle → pushed right)
+   ───────────────────────────── */
+.header-tabs {
+    flex: 1 1 auto;
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 0.6em;
+    min-width: 0;
+}
+
+.tab {
+    position: relative;
+    color: var(--c-text-dim);
+    font-size: 0.68em;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    white-space: nowrap;
+    cursor: pointer;
+    opacity: 0.7;
+    user-select: none;
+    -webkit-user-select: none;
+    transition: color var(--transition), opacity var(--transition);
+}
+
+.tab:hover {
+    color: var(--c-text);
+    opacity: 1;
+}
+
+/* Click flash */
+.tab.clicked {
+    color: var(--c-accent);
+    opacity: 1;
+}
+
+/* ─── Mid-dot separators ─── */
+.tab::before {
+    content: '\00B7';
+    position: absolute;
+    left: -0.42em;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--c-text-muted);
+    opacity: 0.4;
+    pointer-events: none;
+    font-size: 1.2em;
+}
+
+.tab:first-child::before,
+.tab.active::before {
+    display: none;
+}
+
+/* ─── Hover underline slide-in ─── */
+.tab::after {
+    content: '';
+    position: absolute;
+    bottom: -0.1em;
+    left: 10%;
+    right: 10%;
+    height: 1px;
+    background: var(--c-accent);
+    transform: scaleX(0);
+    transition: transform 0.2s ease;
+}
+
+.tab:hover::after {
+    transform: scaleX(1);
+}
+
+/* ─── Active tab — always visible, highlighted ─── */
+.tab.active {
+    color: var(--c-accent);
+    opacity: 1;
+    cursor: default;
+    text-shadow: 0 0 8px rgba(6, 245, 255, 0.5);
+}
+
+.tab.active::after {
+    transform: scaleX(1);
+    opacity: 1;
+    height: 2px;
+    background: var(--c-accent);
+    box-shadow: 0 0 6px rgba(6, 245, 255, 0.7);
+}
+
+/* ─────────────────────────────
+   SEPARATOR (vertical line)
+   ───────────────────────────── */
+.header-sep {
+    flex: 0 0 auto;
+    width: 1px;
+    align-self: stretch;
+    margin: 0.25em 0.7em;
+    background: linear-gradient(
+        180deg,
+        transparent 0%,
+        var(--c-accent) 30%,
+        var(--c-accent) 70%,
+        transparent 100%
+    );
+    opacity: 0.35;
+}
+
+/* ─────────────────────────────
+   CLOCK (far right, stacked)
+   ───────────────────────────── */
+.header-clock {
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    line-height: 1.15;
+    animation: fadeIn 0.6s ease;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+.clock-time {
+    font-size: 0.72em;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    color: var(--c-text);
+    white-space: nowrap;
+}
+
+.clock-date {
+    font-size: 0.5em;
+    font-weight: 500;
+    letter-spacing: 0.02em;
+    color: var(--c-text-muted);
+    white-space: nowrap;
+    opacity: 0.7;
+}

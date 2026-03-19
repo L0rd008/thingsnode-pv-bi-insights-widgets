@@ -1,0 +1,30 @@
+[
+  {
+    "id": "titleText",
+    "name": "Title Text",
+    "type": "text",
+    "default": "SOLAR PV PLANT MONITORING - PORTFOLIO INTELLIGENCE OVERVIEW",
+    "helpText": "Main heading displayed in the title row. Shown in uppercase."
+  },
+  {
+    "id": "timezoneLabel",
+    "name": "Timezone Label",
+    "type": "text",
+    "default": "UTC+05:30",
+    "helpText": "Timezone label displayed next to the clock (e.g. UTC+05:30, IST, GMT)."
+  },
+  {
+    "id": "timezoneOffset",
+    "name": "Timezone Offset (minutes from UTC)",
+    "type": "number",
+    "default": 330,
+    "helpText": "Offset in minutes from UTC for the clock display. Examples: 330 for IST (UTC+05:30), 0 for GMT, -300 for EST."
+  },
+  {
+    "id": "rootState",
+    "name": "Root / Default State ID",
+    "type": "text",
+    "default": "energy_prod",
+    "helpText": "The ThingsBoard dashboard state ID that maps to the default tab. Used when state is 'default' or empty."
+  }
+]

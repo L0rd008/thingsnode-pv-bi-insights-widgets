@@ -1,13 +1,26 @@
 // ============================================
 // Page Header — Minimal Single-Row Design
 // ThingsBoard v4.3.0 PE | Static Widget
-// Fully generic — all config from HTML data-*
+// Adapted for root-state + <tb-dashboard-state> architecture
+//
+// KEY CHANGE from GP Dashboard version:
+//   Instead of navigating to a new state (which leaves root),
+//   this saves a "dashboardMode" server attribute (1-6) on
+//   the currently selected entity. The State Loader widget
+//   reads this attribute and renders the correct sub-state
+//   via <tb-dashboard-state>.
+//
+// Settings Form fields:
+//   titleText       (Text)   - Title prefix
+//   timezoneLabel   (Text)   - e.g. "UTC+05:30"
+//   timezoneOffset  (Number) - minutes from UTC, e.g. 330
+//   rootState       (Text)   - default state ID
 // ============================================
 
 self.onInit = function () {
     var $container = self.ctx.$container;
     var sc = self.ctx.stateController;
-    var actionsApi = self.ctx.actionsApi;
+    var lastResolvedEntityId = null;
 
     // ──────────────────────────────────────────
     //  CONFIG FROM HTML data-* ATTRIBUTES
@@ -52,25 +65,22 @@ self.onInit = function () {
     self._clockInterval = setInterval(updateClock, 1000);
 
     // ──────────────────────────────────────────
-    //  STATE RESOLUTION
+    //  ACTIVE TAB — highlight it, update title
     // ──────────────────────────────────────────
-    function resolveState(raw) {
-        return (!raw || raw === 'default') ? ROOT_STATE : raw;
-    }
+    var currentMode = 1;
 
-    // ──────────────────────────────────────────
-    //  ACTIVE TAB — hide it, update title
-    // ──────────────────────────────────────────
     function setActive(stateId) {
-        var resolved = resolveState(stateId);
+        var resolved = (!stateId || stateId === 'default') ? ROOT_STATE : stateId;
 
-        // Reset all tabs, then hide the active one
-        $tabs.removeClass('active first-visible').show();
+        // Reset all tabs, then mark the active one
+        $tabs.removeClass('active');
         var $active = $tabs.filter('[data-state="' + resolved + '"]');
         $active.addClass('active');
 
-        // Tag the first visible tab so CSS skips its dot
-        $tabs.not('.active').first().addClass('first-visible');
+        // Update currentMode from the tab's data-mode
+        if ($active.length) {
+            currentMode = parseInt($active.attr('data-mode')) || 1;
+        }
 
         // Fade title: out → swap text → in
         if ($title.length && $active.length) {
@@ -82,53 +92,87 @@ self.onInit = function () {
                 $title.css('opacity', 1);
             }, 150);
         }
-
-        // Re-scale after tab visibility change
-        updateScale();
     }
 
     // ──────────────────────────────────────────
-    //  NAVIGATION
-    //  Strategy 1: actionsApi (primary)
-    //  Strategy 2: stateController (fallback)
+    //  SAVE DASHBOARD MODE
+    //  Instead of navigating to a new state,
+    //  save dashboardMode attribute → state loader
+    //  picks it up and renders the sub-state
     // ──────────────────────────────────────────
-    function goToState(targetState) {
-
-        if (actionsApi && typeof actionsApi.handleWidgetAction === 'function') {
-            try {
-                var descriptor = {
-                    id: 'nav_' + targetState,
-                    name: 'navigate',
-                    icon: 'more_horiz',
-                    type: 'updateDashboardState',
-                    targetDashboardStateId: targetState,
-                    openRightLayout: false,
-                    setEntityId: false,
-                    stateEntityParamName: null,
-                    openInSeparateDialog: false,
-                    openInPopover: false
-                };
-                actionsApi.handleWidgetAction({}, descriptor);
-                return;
-            } catch (e) {
-                console.warn('[PageHeader] actionsApi failed:', e.message || e);
-            }
+    function resolveEntityId(raw) {
+        if (!raw) {
+            return null;
         }
 
-        if (sc && typeof sc.updateState === 'function') {
-            try {
-                var params = {};
-                if (typeof sc.getStateParams === 'function') {
-                    params = sc.getStateParams() || {};
+        if (raw.entityType && raw.id) {
+            return {
+                entityType: raw.entityType,
+                id: raw.id
+            };
+        }
+
+        if (raw.id && raw.id.entityType && raw.id.id) {
+            return {
+                entityType: raw.id.entityType,
+                id: raw.id.id
+            };
+        }
+
+        if (raw.entityId && raw.entityId.entityType && raw.entityId.id) {
+            return {
+                entityType: raw.entityId.entityType,
+                id: raw.entityId.id
+            };
+        }
+
+        return null;
+    }
+
+    function getSelectedEntityId() {
+        var params = sc ? sc.getStateParams() : {};
+        var selected = params && (params.SelectedAsset || params.selectedEntity || params.entityId);
+        var resolved = resolveEntityId(selected);
+
+        if (resolved) {
+            lastResolvedEntityId = resolved;
+            return resolved;
+        }
+
+        return lastResolvedEntityId;
+    }
+
+    function refreshDashboardBindings() {
+        if (typeof self.ctx.updateAliases === 'function') {
+            self.ctx.updateAliases();
+        }
+        if (typeof self.ctx.detectChanges === 'function') {
+            self.ctx.detectChanges();
+        }
+        if (self.ctx.dashboard && typeof self.ctx.dashboard.dashboardTimewindowChanged === 'function') {
+            self.ctx.dashboard.dashboardTimewindowChanged();
+        }
+    }
+
+    function saveDashboardMode(mode) {
+        var entityId = getSelectedEntityId();
+
+        if (entityId && self.ctx.attributeService) {
+            self.ctx.attributeService.saveEntityAttributes(
+                entityId, 'SERVER_SCOPE',
+                [{ key: 'dashboardMode', value: mode }]
+            ).subscribe(
+                function () {
+                    console.log('[PageHeader] dashboardMode saved:', mode);
+                    refreshDashboardBindings();
+                },
+                function (err) {
+                    console.warn('[PageHeader] Failed to save dashboardMode:', err);
                 }
-                sc.updateState(targetState, params, false);
-                return;
-            } catch (e) {
-                console.warn('[PageHeader] updateState failed:', e.message || e);
-            }
+            );
+        } else {
+            console.warn('[PageHeader] No selected entity found in state params. Expected param name: SelectedAsset');
         }
-
-        console.error('[PageHeader] No navigation method for "' + targetState + '"');
     }
 
     // ──────────────────────────────────────────
@@ -136,6 +180,7 @@ self.onInit = function () {
     // ──────────────────────────────────────────
     $tabs.on('click', function () {
         var target = $(this).attr('data-state');
+        var mode = parseInt($(this).attr('data-mode')) || 1;
         if (!target) return;
 
         // Brief cyan flash for click feedback
@@ -143,18 +188,17 @@ self.onInit = function () {
         $clicked.addClass('clicked');
         setTimeout(function () { $clicked.removeClass('clicked'); }, 150);
 
+        // Update visual state
         setActive(target);
-        goToState(target);
+
+        // Save dashboardMode attribute (state loader reads this)
+        saveDashboardMode(mode);
     });
 
     // ──────────────────────────────────────────
     //  INITIAL ACTIVE STATE
     // ──────────────────────────────────────────
-    try {
-        setActive(sc ? sc.getStateId() : ROOT_STATE);
-    } catch (e) {
-        setActive(ROOT_STATE);
-    }
+    setActive(ROOT_STATE);
 
     // ──────────────────────────────────────────
     //  SCALING — single row measurement
@@ -193,20 +237,6 @@ self.onInit = function () {
     updateScale();
 
     // ──────────────────────────────────────────
-    //  POLL FOR EXTERNAL STATE CHANGES
-    // ──────────────────────────────────────────
-    self._statePoll = setInterval(function () {
-        if (!sc) return;
-        try {
-            var cur = resolveState(sc.getStateId());
-            var $act = $tabs.filter('.active');
-            if (!$act.length || $act.attr('data-state') !== cur) {
-                setActive(cur);
-            }
-        } catch (e) { /* ignore */ }
-    }, 300);
-
-    // ──────────────────────────────────────────
     //  RESIZE
     // ──────────────────────────────────────────
     self.onResize = function () {
@@ -220,10 +250,6 @@ self.onInit = function () {
         if (self._clockInterval) {
             clearInterval(self._clockInterval);
             self._clockInterval = null;
-        }
-        if (self._statePoll) {
-            clearInterval(self._statePoll);
-            self._statePoll = null;
         }
         $tabs.off('click');
     };
