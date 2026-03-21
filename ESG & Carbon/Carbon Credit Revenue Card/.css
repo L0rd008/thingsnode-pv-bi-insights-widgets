@@ -1,23 +1,24 @@
 /* ========================================
-   ESG KPI Card — Enhanced Multi-Mode
+   Carbon Credit Revenue Card
    ThingsBoard v4.3.0 PE | Latest Values
    Dynamic scaling — all sizes in em
    ======================================== */
-.esg-card {
-    /* --- DEFAULT COLOR TOKENS (cyan / custom) --- */
-    --c-accent: #06F5FF;
-    --c-accent-dim: rgba(6, 245, 255, 0.7);
-    --c-accent-glow: rgba(6, 245, 255, 0.15);
-    --c-accent-border: rgba(6, 245, 255, 0.4);
-    --c-accent-hover: rgba(6, 245, 255, 0.8);
-    --c-accent-glow-hover: rgba(6, 245, 255, 0.25);
+.carbon-rev-card {
+    /* --- COLOR TOKENS (Green / Mint) --- */
+    --c-accent: #76ff93;
+    --c-accent-dim: rgba(118, 255, 147, 0.7);
+    --c-accent-glow: rgba(118, 255, 147, 0.12);
+    --c-accent-border: rgba(118, 255, 147, 0.4);
+    --c-accent-hover: rgba(118, 255, 147, 0.8);
+    --c-accent-glow-hover: rgba(118, 255, 147, 0.25);
     --c-bg: linear-gradient(180deg, rgba(2, 10, 67, 0.95) 0%, rgba(5, 20, 50, 0.95) 100%);
     --c-text: #FFFFFF;
-    --c-text-dim: #B0BEC5;
+    --c-text-dim: #90A4AE;
     --c-tooltip-bg: rgba(202, 218, 221, 0.9);
     --c-good: #66BB6A;
     --c-warning: #FFC107;
     --c-critical: #FF5252;
+    --c-bar-bg: rgba(255, 255, 255, 0.1);
 
     /* --- LAYOUT: Absolute fill --- */
     position: absolute;
@@ -35,7 +36,7 @@
     justify-content: center;
 
     background: var(--c-bg);
-    border: 2px solid var(--c-accent-border);
+    border: 1px solid var(--c-accent-border);
     box-shadow: 0 0 12px var(--c-accent-glow), inset 0 0 15px rgba(0, 0, 0, 0.4);
     border-radius: 8px;
     padding: 0.5em 0.7em;
@@ -49,57 +50,9 @@
 }
 
 /* --- HOVER GLOW --- */
-.esg-card:hover {
+.carbon-rev-card:hover {
     border-color: var(--c-accent-hover);
     box-shadow: 0 0 22px var(--c-accent-glow-hover), inset 0 0 8px rgba(0, 0, 0, 0.2);
-}
-
-/* =========================================
-   MODE COLOR OVERRIDES
-   ========================================= */
-
-/* ---- Carbon (Green) ---- */
-.esg-card.mode-carbon {
-    --c-accent: #76ff93;
-    --c-accent-dim: rgba(118, 255, 147, 0.7);
-    --c-accent-glow: rgba(118, 255, 147, 0.12);
-    --c-accent-border: rgba(118, 255, 147, 0.4);
-    --c-accent-hover: rgba(118, 255, 147, 0.8);
-    --c-accent-glow-hover: rgba(118, 255, 147, 0.25);
-    --c-bg: linear-gradient(to bottom, #26555c 0%, #173651 40%, #020A43 100%);
-}
-
-/* ---- Water (Blue) ---- */
-.esg-card.mode-water {
-    --c-accent: #42A5F5;
-    --c-accent-dim: rgba(66, 165, 245, 0.7);
-    --c-accent-glow: rgba(66, 165, 245, 0.12);
-    --c-accent-border: rgba(66, 165, 245, 0.4);
-    --c-accent-hover: rgba(66, 165, 245, 0.8);
-    --c-accent-glow-hover: rgba(66, 165, 245, 0.25);
-    --c-bg: linear-gradient(180deg, rgba(5, 25, 60, 0.98) 0%, rgba(2, 12, 40, 0.98) 100%);
-}
-
-/* ---- Waste (Amber) ---- */
-.esg-card.mode-waste {
-    --c-accent: #FFD54F;
-    --c-accent-dim: rgba(255, 213, 79, 0.7);
-    --c-accent-glow: rgba(255, 193, 7, 0.12);
-    --c-accent-border: rgba(255, 193, 7, 0.4);
-    --c-accent-hover: rgba(255, 193, 7, 0.8);
-    --c-accent-glow-hover: rgba(255, 193, 7, 0.25);
-    --c-bg: linear-gradient(180deg, rgba(40, 30, 10, 0.98) 0%, rgba(20, 15, 8, 0.98) 100%);
-}
-
-/* ---- Renewable (Cyan) ---- */
-.esg-card.mode-renewable {
-    --c-accent: #06F5FF;
-    --c-accent-dim: rgba(6, 245, 255, 0.7);
-    --c-accent-glow: rgba(6, 245, 255, 0.15);
-    --c-accent-border: rgba(6, 245, 255, 0.45);
-    --c-accent-hover: rgba(6, 245, 255, 0.85);
-    --c-accent-glow-hover: rgba(6, 245, 255, 0.3);
-    --c-bg: linear-gradient(180deg, rgba(2, 10, 67, 0.95) 0%, rgba(5, 20, 50, 0.95) 100%);
 }
 
 /* ===================
@@ -115,14 +68,14 @@
 }
 
 .card-icon {
-    font-size: 0.85em;
+    font-size: 0.7em;
     flex-shrink: 0;
     line-height: 1;
     filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.6));
 }
 
 .card-title {
-    font-size: 0.85em;
+    font-size: 0.6em;
     font-weight: 700;
     color: var(--c-text);
     text-transform: uppercase;
@@ -148,12 +101,11 @@
 .value-row {
     display: flex;
     align-items: baseline;
-    justify-content: center;
-    gap: 0.12em;
+    gap: 0.15em;
 }
 
 .main-value {
-    font-size: 2em;
+    font-size: 1.5em;
     font-weight: 700;
     color: var(--c-accent);
     line-height: 1;
@@ -161,19 +113,22 @@
     transition: color 0.4s ease;
 }
 
-.unit {
-    font-size: 0.85em;
+.currency-unit {
+    font-size: 0.75em;
     font-weight: 600;
     color: var(--c-accent-dim);
     opacity: 0.9;
     line-height: 1;
 }
 
-.unit sub {
-    font-size: 0.65em;
-    vertical-align: baseline;
-    position: relative;
-    top: 0.25em;
+.main-label {
+    font-size: 0.45em;
+    color: var(--c-text);
+    text-transform: uppercase;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    opacity: 0.85;
+    margin-top: 0.1em;
 }
 
 /* --- Sub-content --- */
@@ -181,17 +136,16 @@
     min-height: 0;
     display: flex;
     align-items: center;
-    justify-content: center;
     line-height: 1.2;
     margin-top: 0.15em;
+    gap: 0.6em;
 }
 
 /* Delta */
 .delta-container {
     display: none;
     align-items: center;
-    justify-content: center;
-    font-size: 0.65em;
+    font-size: 0.55em;
     font-weight: 600;
     color: var(--c-good);
     gap: 0.15em;
@@ -202,7 +156,7 @@
 }
 
 .delta-arrow {
-    font-size: 0.85em;
+    font-size: 0.75em;
 }
 
 .delta-label {
@@ -211,44 +165,10 @@
     font-weight: 400;
 }
 
-/* Progress bar */
-.progress-container {
-    display: none;
-    flex-direction: column;
-    align-items: center;
-    width: 85%;
-    gap: 0.1em;
-}
-
-.progress-bg {
-    width: 100%;
-    height: 0.45em;
-    background: rgba(255, 255, 255, 0.08);
-    border-radius: 0.3em;
-    overflow: hidden;
-    position: relative;
-}
-
-.progress-fill {
-    height: 100%;
-    width: 0%;
-    background: linear-gradient(90deg, var(--c-accent) 0%, var(--c-accent-dim) 100%);
-    border-radius: 0.3em;
-    transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1), background 0.4s ease;
-    box-shadow: 0 0 6px var(--c-accent-glow);
-}
-
-.progress-label {
-    font-size: 0.45em;
-    color: var(--c-text-dim);
-    font-weight: 500;
-}
-
 /* Status badge */
 .status-container {
     display: none;
     align-items: center;
-    justify-content: center;
     gap: 0.2em;
     font-size: 0.55em;
     font-weight: 600;
@@ -296,23 +216,79 @@
 }
 
 /* ===================
+   BAR SECTION
+   =================== */
+.bar-section {
+    z-index: 2;
+    margin-top: 0.3em;
+}
+
+.bar-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    margin-bottom: 0.15em;
+}
+
+.bar-title {
+    font-size: 0.4em;
+    color: var(--c-text);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    opacity: 0.85;
+}
+
+.bar-value-text {
+    font-size: 0.5em;
+    color: var(--c-text);
+    font-weight: 700;
+}
+
+.progress-track {
+    width: 100%;
+    height: 0.4em;
+    background: var(--c-bar-bg);
+    border-radius: 0.3em;
+    overflow: hidden;
+    position: relative;
+}
+
+.progress-fill {
+    height: 100%;
+    width: 0%;
+    background: linear-gradient(90deg, var(--c-accent) 0%, var(--c-accent-dim) 100%);
+    border-radius: 0.3em;
+    transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 0 6px var(--c-accent-glow);
+}
+
+/* ===================
    FOOTER
    =================== */
 .card-footer {
     flex: 0 0 auto;
-    width: 100%;
-    text-align: center;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
     z-index: 2;
     line-height: 1.1;
+    margin-top: 0.2em;
 }
 
-.card-subtitle {
-    font-size: 0.6em;
-    font-weight: 400;
+.footer-left,
+.footer-right {
+    font-size: 0.35em;
+    font-weight: 500;
     color: var(--c-text-dim);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+}
+
+.footer-right {
+    opacity: 0.7;
+    text-align: right;
 }
 
 /* ===================
@@ -335,13 +311,13 @@
     border-bottom-right-radius: 8px;
 }
 
-.esg-card:hover .tooltip-container {
+.carbon-rev-card:hover .tooltip-container {
     opacity: 1;
     transform: translateY(0);
 }
 
 .tooltip-text {
-    font-size: 0.6em;
+    font-size: 0.5em;
     color: #000;
     font-weight: 600;
     line-height: 1.3;
