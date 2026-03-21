@@ -1,4 +1,5 @@
-﻿# IDE / editor
+# IDE / editor
+.cursor/
 .vscode/
 .idea/
 *.code-workspace
@@ -16,6 +17,10 @@ venv/
 # Generated artifacts
 All Widgets.txt
 
+docs
+docs/
+/docs
+/docs/
 # Confidential local context / credentials (do not publish)
 Context/
 Finance_Dummy.txt
