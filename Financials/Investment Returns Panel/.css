@@ -83,7 +83,7 @@
 }
 
 .card-title {
-    font-size: 0.7em;
+    font-size: 0.5em;
     font-weight: 700;
     color: var(--c-text);
     text-transform: uppercase;
@@ -188,7 +188,7 @@
 
 /* ─── Sub-Card Typography ─── */
 .sub-title {
-    font-size: 0.55em;
+    font-size: 0.4em;
     font-weight: 600;
     color: var(--c-text-dim);
     text-transform: uppercase;
@@ -203,7 +203,7 @@
 }
 
 .sub-value {
-    font-size: 1.6em;
+    font-size: 1.25em;
     font-weight: 700;
     color: var(--c-accent);
     line-height: 1;
@@ -225,7 +225,7 @@
 }
 
 .sub-footer {
-    font-size: 0.42em;
+    font-size: 0.35em;
     font-weight: 500;
     color: var(--c-text-muted);
     text-align: center;
@@ -288,7 +288,7 @@
 }
 
 .card-footer {
-    font-size: 0.42em;
+    font-size: 0.35em;
     font-weight: 500;
     color: var(--c-text-muted);
     white-space: nowrap;
