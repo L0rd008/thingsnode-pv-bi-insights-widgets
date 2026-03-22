@@ -1,87 +1,96 @@
-﻿# ThingsNode SCADA BI Insights Widgets
+# ThingsNode SCADA BI Insights Widgets
 
-Custom ThingsBoard widgets built for ThingsNode's SCADA platform for PV plants, focused on Business Intelligence and stakeholder-facing insights.
+Custom ThingsBoard widgets for PV plant BI dashboards (asset owner and investor use cases).
 
-## Dashboard Scope
+## Project Layout
 
-These widgets were designed for a six-tab BI dashboard aimed at asset owners and investors:
+The repo is grouped by dashboard domain:
 
-- Forecast and Risk
-- Financials
-- ESG and Carbon
-- Grid and Losses
-- Portfolio
-- Energy Production
+- `Energy & Yield`
+- `Forecasts & Risk`
+- `Financials`
+- `ESG & Carbon`
+- `Grid & Losses`
+- `Portfolio`
+- `Utility`
 
-## Purpose
-
-- Keep reusable custom widget source code in one project.
-- Version widget updates cleanly over time.
-- Support dashboard assembly across portfolio, plant, and device views.
-
-## Repository Structure
-
-Each widget is stored in its own folder. Most folders use this file pattern:
+Most widget folders use this file pattern:
 
 - `.html`: widget template
-- `.css`: styling and theme tokens
-- `.js`: widget logic (ThingsBoard lifecycle + data mapping)
-- `settings.json`: widget settings schema for ThingsBoard
+- `.css`: styling
+- `.js`: widget logic (TB lifecycle + telemetry mapping + calculations)
+- `settings.json` (optional): widget settings schema
+- `resources.txt` (optional): external libraries
+- `README.md` (when documented): quick setup + telemetry contract + domain context
 
-Some folders also include:
+Note: many source files are intentionally named `.js`, `.html`, `.css` (leading dot).
 
-- `resources.txt`: external script/style resource declarations
-- `test_harness.html`: local widget preview harness
-- exported widget JSON files
+## Widget Setup Guides (README Index)
 
-Important: many source files are intentionally named exactly `.js`, `.html`, and `.css` (leading dot).
+These are the current handover docs for new developers.
 
-## Widget Folders
+### Energy & Yield
 
-- Action Button
-- Capacity Factor Compliance
-- Carbon Credit Revenue Card
-- Curtailment vs Potential Power
-- Debt Service Panel
-- Degradation Adjusted Yield Index
-- DIVERSIFICATION ANALYSIS (CORRELATION MATRIX)
-- DSCR Status Card
-- ESG KPI Card
-- Expected vs Actual Revenue
-- Finance KPI Card
-- Forecast Deviation Card (FDI)
-- Forecast vs Actual Energy
-- Grid Outage Timeline
-- Insurance Claimable Events Summary
-- Investment Returns Panel
-- LCOE vs TARIFF Card
-- Lifetime ESG Summary Card
-- Loss Attribution
-- MULTI-SITE ENERGY CONTRIBUTION
-- Page Header
-- Payback Period Timeline
-- Portfolio Compliance Summary Table
-- Portfolio Intelligence Card
-- Portfolio Site Status Map
-- Project Navigation Bar
-- Revenue-at-Risk Breakdown Widget
-- Risk Summary Panel Widget
-- Title Card
-- Universal Energy KPI Card
+- `Energy & Yield/Degradation Adjusted Yield Index/README.md`
+- `Energy & Yield/Universal Energy KPI Card/Best/README.md`
 
-## Using a Widget in ThingsBoard
+### Forecasts & Risk
 
-1. Create a custom widget in ThingsBoard PE.
-2. Paste the folder's `.html`, `.css`, and `.js` into the editor.
-3. If available, paste `settings.json` into widget settings schema.
-4. If available, register libraries from `resources.txt`.
-5. Validate behavior using the folder's `test_harness.html` where provided.
+- `Forecasts & Risk/Forecast vs Actual Energy/V1 TB Latest Values Widget/README.md`
+- `Forecasts & Risk/Forecast Deviation Card (FDI)/README.md`
+- `Forecasts & Risk/Expected vs Actual Revenue/README.md`
+- `Forecasts & Risk/Risk Summary Panel Widget/README.md`
+- `Forecasts & Risk/Revenue-at-Risk Breakdown Widget/README.md`
+
+### Financials
+
+- `Financials/Finance KPI Card/README.md`
+- `Financials/LCOE vs TARIFF Card/README.md`
+- `Financials/Debt Service Panel/README.md`
+- `Financials/Payback Period Timeline/README.md`
+- `Financials/Investment Returns Panel/README.md`
+- `Financials/DSCR Status Card/README.md`
+
+### ESG & Carbon
+
+- `ESG & Carbon/ESG KPI Card/README.md`
+- `ESG & Carbon/Carbon Credit Revenue Card/README.md`
+- `ESG & Carbon/Lifetime ESG Summary Card/README.md`
+
+### Grid & Losses
+
+- `Grid & Losses/Loss Attribution/README.md`
+- `Grid & Losses/Capacity Factor Compliance/README.md`
+- `Grid & Losses/Curtailment vs Potential Power/V3 TB Latest Values Widget/README.md`
+- `Grid & Losses/Curtailment vs Potential Power/V2 TB Time Series Widget/README.md`
+- `Grid & Losses/Curtailment vs Potential Power/V1 TB Latest Values Widget/README.md`
+- `Grid & Losses/Insurance Claimable Events Summary/README.md`
+- `Grid & Losses/Grid Outage Timeline/README.md`
+
+### Portfolio
+
+- `Portfolio/Portfolio Intelligence Card/README.md`
+- `Portfolio/Portfolio Site Status Map/README.md`
+- `Portfolio/MULTI-SITE ENERGY CONTRIBUTION/README.md`
+- `Portfolio/DIVERSIFICATION ANALYSIS (CORRELATION MATRIX)/README.md`
+- `Portfolio/Portfolio Compliance Summary Table/README.md`
+
+## Standard TB Import Flow
+
+1. Open the target widget folder (or version subfolder).
+2. Create a ThingsBoard custom widget with the correct widget type.
+3. Paste `.html`, `.css`, `.js` into TB widget editor.
+4. Add `settings.json` and `resources.txt` if present.
+5. Configure datasources and telemetry keys exactly as documented in that widget's `README.md`.
+6. Validate with the example telemetry from the same `README.md`.
+
+## Contributor Rules
+
+- If widget calculations or telemetry keys change, update that widget's `README.md` in the same commit.
+- Preserve datasource ordering assumptions documented per widget.
+- Keep units explicit (`kW`, `kWh`, `%`, `LKR`, etc.) in code and docs.
 
 ## Tooling
 
-- `generate_all_widgets.py`: generates a consolidated `All Widgets.txt` snapshot for selected widgets.
-- `pyrightconfig.json`: static analysis config for Python tooling.
-
-## Security and Sharing
-
-This repo is configured to avoid committing sensitive local context and credentials. Review `.gitignore` before sharing publicly.
+- `generate_all_widgets.py`: builds consolidated widget exports into `All Widgets.txt`.
+- `pyrightconfig.json`: Python static analysis config.
