@@ -113,7 +113,7 @@
 /* Invert OSM tiles: restore water/land colors but soften contrast to mute roads/vegetation, 
    with a subtle hue shift for letters */
 .map-container .leaflet-tile-pane {
-    filter: invert(100%) sepia(15%) hue-rotate(200deg) brightness(1.15) contrast(0.9) saturate(1.2);
+    filter: invert(100%) sepia(5%) hue-rotate(200deg) brightness(0.85) contrast(0.75) saturate(1.25);
 }
 
 /* ===================
