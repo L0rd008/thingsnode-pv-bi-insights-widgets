@@ -69,7 +69,7 @@ function initMap() {
         preferCanvas: true  // better perf for many markers
     });
 
-    // Using OpenStreetMap for better terrain/water contrast, inverted via CSS to create dark mode
+    // Reverting to OpenStreetMap to restore the requested land and water colors
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         maxZoom: 19
     }).addTo(self.map);

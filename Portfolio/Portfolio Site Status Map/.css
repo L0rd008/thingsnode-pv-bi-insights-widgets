@@ -110,9 +110,10 @@
     z-index: 1;
 }
 
-/* Invert map tiles to create a highly readable dark map with active terrain contrast */
+/* Invert OSM tiles: restore water/land colors but soften contrast to mute roads/vegetation, 
+   with a subtle hue shift for letters */
 .map-container .leaflet-tile-pane {
-    filter: invert(100%) hue-rotate(180deg) brightness(1.1) contrast(1.1) saturate(1.5);
+    filter: invert(100%) sepia(15%) hue-rotate(200deg) brightness(1.15) contrast(0.9) saturate(1.2);
 }
 
 /* ===================
