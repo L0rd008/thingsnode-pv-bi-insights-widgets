@@ -6,21 +6,21 @@
         <div class="header-right">
             <span class="status-dot js-status-dot"></span>
             <span class="status-text js-status-text">--</span>
-            <select class="window-select js-window-select">
-                <option value="7">Last 7 Days</option>
-                <option value="14">Last 14 Days</option>
-                <option value="30">Last 30 Days</option>
-                <option value="90">Last 90 Days</option>
-            </select>
+            <div class="stat-item" style="margin-left: 0.5em;">
+                <span class="stat-label">Events</span>
+                <span class="stat-value js-stat-count">--</span>
+            </div>
         </div>
     </div>
 
     <!-- ═══ SUMMARY STATS ═══ -->
     <div class="summary-row">
-        <div class="stat-item">
-            <span class="stat-label">Events</span>
-            <span class="stat-value js-stat-count">--</span>
-        </div>
+        <select class="window-select js-window-select">
+            <option value="7">Last 7 Days</option>
+            <option value="14">Last 14 Days</option>
+            <option value="30">Last 30 Days</option>
+            <option value="90">Last 90 Days</option>
+        </select>
         <div class="stat-sep"></div>
         <div class="stat-item">
             <span class="stat-label">Total Lost</span>
