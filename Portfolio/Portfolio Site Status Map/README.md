@@ -1,77 +1,53 @@
 # Portfolio Site Status Map - Quick Read and Setup
 
 ## 0) What this means in a PV portfolio
-- Geospatial health view of all sites with marker size by capacity and color by status.
-- Useful for operations centers to spot where risk is concentrated geographically.
+- Geospatial health view of all sites with marker size dynamically tracking plant scale and color tracking health status.
+- Designed with an ultra-legible, high-contrast dark blue map theme with white lettering for maximum visibility.
+- Highly useful for operations centers to spot geographical risk patterns instantly.
 
 ## 1) Calculations and rendering logic
-For each site object in input JSON:
-1. Validate coordinates (`lat`, `lon`).
-2. Marker size by `capacity_mw`:
-   - `>50` MW -> large
-   - `>10` MW -> medium
-   - else small
-3. Marker color by `status`:
+For each site mapped from the dashboard:
+1. Coordinates are extracted via `latitude`/`lat` and `longitude`/`lon`.
+2. Marker size dynamically compares plant scale based on `Plant Total Capacity`:
+   - Normalized into MW internally (based on UI Setting unit W/kW/MW)
+   - `>=50` MW -> large dot
+   - `>=10` MW -> medium dot
+   - else -> small dot
+3. Marker color is determined by the `status` telemetry:
    - `healthy` -> green
    - `warning` -> amber
    - `fault` -> red
-4. Tooltip fields:
-   - name + capacity
-   - status
-   - optional `rar_lkr` shown as million LKR
-   - optional `cf_status`
-5. Header stats count markers by status.
+4. Tooltip dynamically parses:
+   - Site name (via `plant_name` attribute, defaults to Entity Name)
+   - Capacity + Base Unit suffix
+   - Operational Status
+   - Extra metrics: `rar_lkr` shown as million LKR, and `cf_status` dynamically colored.
+5. Floating dynamic stats bar tracks overall counts per status category.
 
-## 2) Telemetry requirements and datasource order
-- Required:
-  - `DS[0]` JSON array of site objects.
-- Additional datasources are ignored.
-- Order matters because code reads only `self.ctx.data[0]`.
+## 2) Entity Mapping and Telemetry Requirements
+The widget connects directly to individual Assets rather than expecting a pre-compiled JSON payload. This is done by adding a Data Source tied to an **Entity Alias** (e.g. "Entity Group" or "Assets by type") so the map fetches data for all underlying plants simultaneously.
 
-Expected JSON schema (per site):
-- `name` (string)
-- `lat`, `lon` (number)
-- `capacity_mw` (number)
+**Required Mapping Keys (Attributes):**
+- `latitude` or `lat` (number)
+- `longitude` or `lon` (number)
+- `Plant Total Capacity` or `capacity` (number)
+
+**Optional Telemetry / Attributes:**
+- `plant_name` or `name` (string - custom label)
 - `status` (`healthy`/`warning`/`fault`)
-- optional `rar_lkr` (number)
-- optional `cf_status` (string)
+- `rar_lkr` (number - Revenue at risk)
+- `cf_status` (string - capacity factor status)
 
-## 3) Units (input vs output)
-- Capacity shown in `MW`.
-- Revenue-at-Risk in tooltip shown as `M LKR` (hardcoded conversion from `rar_lkr`).
-- No configurable unit conversion in this widget.
+*Note: You can map either the exact database Key Name or edit its UI visual Label to match, the widget will detect both.*
+
+## 3) Units (Input vs Output)
+- Capacity units are now **fully configurable** in the widget's "Settings" tab (e.g., `W`, `kW`, `MW`). The map dynamically converts the raw attribute to `MW` internally solely for dot scaling, but will display your chosen raw unit dynamically in the Tooltips and Legends.
+- Revenue-at-Risk `rar` is hardcoded to be processed into `M LKR` (assumes raw feed is in LKR).
 
 ## 4) ThingsBoard setup checklist
-1. Add widget as `Latest values`.
-2. Map first datasource key to JSON array payload.
-3. Ensure each site has valid coordinates.
-4. Keep status values standardized (`healthy`, `warning`, `fault`).
-
-## 5) Example telemetry
-```json
-{
-  "ts": 1774224000000,
-  "values": {
-    "portfolio_site_map": [
-      {
-        "name": "Site A",
-        "lat": 7.32,
-        "lon": 80.64,
-        "capacity_mw": 55,
-        "status": "healthy",
-        "rar_lkr": 1200000,
-        "cf_status": "Normal"
-      },
-      {
-        "name": "Site B",
-        "lat": 6.98,
-        "lon": 81.06,
-        "capacity_mw": 18,
-        "status": "warning",
-        "rar_lkr": 4500000,
-        "cf_status": "Warning"
-      }
-    ]
-  }
-}
-```
+1. Map an Entity Alias that captures multiple assets (Avoid single-asset alias).
+2. Add the widget to the dashboard as `Latest values`.
+3. In Data Sources, select your multi-asset Alias.
+4. Add all matching Data Keys (`lat`, `lon`, `Plant Total Capacity`, `status`, etc.).
+5. Under the *Settings* tab, set your `Capacity Unit (W, kW, MW)`.
+6. Ensure your assets have coordinates populated and `status` values standardized.
