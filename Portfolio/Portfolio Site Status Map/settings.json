@@ -4,5 +4,11 @@
     "name": "Widget Title",
     "type": "text",
     "default": "Portfolio Site Locations"
+  },
+  {
+    "id": "capacityUnit",
+    "name": "Capacity Unit (W, kW, MW)",
+    "type": "text",
+    "default": "MW"
   }
 ]
