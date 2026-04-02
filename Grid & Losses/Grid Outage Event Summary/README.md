@@ -1,70 +1,37 @@
-# Insurance Claimable Events Summary - Quick Read and Setup
+# Grid Outage Event Summary - Quick Read and Setup
 
 ## 0) What this means in a PV plant
-- This widget summarizes insurable outage/failure events and their claim status.
-- It helps operations, finance, and insurance teams track recoverable losses.
+- This widget tracks and summarizes individual grid outages, identifying the resulting financial loss per event.
+- It seamlessly scales to support both purely operational tracking and optional financial/insurance claim workflows (with its toggleable status column).
 
 ## 1) Data model and calculations
-Expected input is a JSON array (from `DS[0]`) where each event has:
+Expected input is a JSON array where each event has:
 - `date`
 - `eventType`
 - `energyLost`
 - `amount`
-- `status` (Approved/Pending/Rejected or similar text)
+- `status` (Optional. Approved/Pending/Rejected or similar text. Only required if `showStatusColumn` is true).
 
 Processing logic:
-1. Parse event array from `DS[0]`.
-2. Optional demo fallback when empty and `enableDemoData=true`.
-3. Status mapping:
-   - contains `approv` -> approved
-   - contains `reject` -> rejected
-   - else -> pending
-4. Total claimable amount includes:
-   - approved + pending
-   - rejected excluded
-5. Header status:
-   - all approved, none pending/rejected -> `ALL APPROVED`
-   - any rejected -> `<n> REJECTED` (critical)
-   - else pending exists -> `<n> PENDING` (warning)
+1. Parse event array from the telemetry key defined in `settings`.
+2. Total financial loss calculates:
+   - For claim workflows (Status enabled): sum of approved + pending (rejected excluded).
+   - For pure operational tracking (Status disabled): sum of all events.
+3. Rendering adapts dynamically, causing fields to horizontally expand to absorb the extra space if Status tracking is turned off.
 
-## 2) Telemetry requirements and datasource order
+## 2) Telemetry requirements
 - Required:
-  - `DS[0]`: JSON array of claim events
-- Additional datasources are ignored.
-- `settings.dataKeyName` exists but is not used in current JS logic.
+  - `DS[0]`: JSON array of outages/events.
+- By default, the widget looks for `grid_outage_data`, but this can be changed in settings under `Attribute Key Name`.
 
 ## 3) Units (input vs output)
 - `energyLost` displayed with `energyUnit` (default `MWh`).
-- `amount` displayed with `currencySym` (default `LKR`).
+- Financial loss / `amount` displayed with `currencySym` (default `LKR`).
 - No numeric conversion/scaling is applied by code.
 
 ## 4) ThingsBoard setup checklist
 1. Add widget as `Latest values`.
-2. Publish claim-event JSON to first datasource key.
-3. Set `currencySym` and `energyUnit`.
-4. Disable `enableDemoData` in production.
-
-## 5) Example telemetry
-```json
-{
-  "ts": 1774137600000,
-  "values": {
-    "insurance_claims_data": [
-      {
-        "date": "2026-02-02",
-        "eventType": "Storm Damage",
-        "energyLost": 15.2,
-        "amount": 350000,
-        "status": "Pending"
-      },
-      {
-        "date": "2026-01-14",
-        "eventType": "Inverter Fire",
-        "energyLost": 28.5,
-        "amount": 650000,
-        "status": "Approved"
-      }
-    ]
-  }
-}
-```
+2. Map your telemetry key to contain a JSON array payload.
+3. Select whether to show/hide the **Status Column** in the Settings tab.
+4. Set your `currencySym` and `energyUnit`.
+5. Disable `enableDemoData` in production.
