@@ -6,11 +6,12 @@
 // ════════════════════════════════════════════════════
 
 var $el, s;
-var $card, $title, $windowLabel;
+var $card, $title, $windowSelect;
 var $statusDot, $statusText;
 var $statCount, $statEnergy, $statDuration;
 var $track, $axis, $empty;
 var $evtTooltip, $tooltip;
+var currentDays = 7;
 
 // ──────────────────────────────────────────────────
 //  Lifecycle: Init
@@ -23,7 +24,7 @@ self.onInit = function () {
     // ── Cache DOM ──
     $card = $el.find('.timeline-card');
     $title = $el.find('.js-title');
-    $windowLabel = $el.find('.js-window-label');
+    $windowSelect = $el.find('.js-window-select');
     $statusDot = $el.find('.js-status-dot');
     $statusText = $el.find('.js-status-text');
     $statCount = $el.find('.js-stat-count');
@@ -45,6 +46,20 @@ self.onInit = function () {
             '--c-accent-glow-hover': s.accentColor + '40'
         });
     }
+
+    // ── Dropdown binding ──
+    currentDays = parseInt(s.daysToShow) || 7;
+    
+    // Ensure the select dropdown value matches settings if custom options are used
+    if ($windowSelect.find('option[value="' + currentDays + '"]').length === 0) {
+        $windowSelect.append('<option value="' + currentDays + '">Last ' + currentDays + ' Days</option>');
+    }
+    $windowSelect.val(currentDays);
+
+    $windowSelect.on('change', function () {
+        currentDays = parseInt($(this).val()) || 7;
+        self.onDataUpdated();
+    });
 
     updateDom();
     self.onResize();
@@ -111,12 +126,10 @@ self.onDataUpdated = function () {
     }
 
     // ── 3. Time window ──
-    var daysToShow = s.daysToShow || 7;
+    var daysToShow = currentDays;
     var windowEnd = Date.now();
     var windowDuration = daysToShow * 24 * 60 * 60 * 1000;
     var windowStart = windowEnd - windowDuration;
-
-    $windowLabel.text('LAST ' + daysToShow + ' DAYS');
 
     // ── 4. Axis ticks ──
     for (var i = 0; i <= daysToShow; i++) {
