@@ -78,7 +78,8 @@ function initChart() {
             if (datasets.length < 3) return;
 
             var potentialData = datasets[0].data;
-            var exportedData = datasets[2].data;
+            var exportedData = datasets[1].data;
+            var envData = datasets[2].data;
             if (!potentialData || !exportedData || potentialData.length === 0) return;
 
             var area = chart.chartArea;
@@ -87,14 +88,15 @@ function initChart() {
             var yScale = chart.scales.y;
             var cCtx = chart.ctx;
 
-            /* find the point of maximum curtailment */
+            /* find the point of maximum actual curtailment */
             var maxCurt = 0;
             var maxIdx = -1;
-            for (var i = 0; i < potentialData.length; i++) {
+            for (var i = 0; i < envData.length; i++) {
                 var pVal = potentialData[i];
                 var eVal = exportedData[i];
-                if (pVal == null || eVal == null) continue;
-                var curtVal = pVal - eVal;
+                var envVal = envData[i];
+                if (pVal == null || eVal == null || envVal == null) continue;
+                var curtVal = envVal - eVal;
                 if (curtVal > maxCurt) {
                     maxCurt = curtVal;
                     maxIdx = i;
@@ -103,7 +105,7 @@ function initChart() {
 
             if (maxIdx < 0 || maxCurt < 1) return;
 
-            var pY = yScale.getPixelForValue(potentialData[maxIdx]);
+            var pY = yScale.getPixelForValue(envData[maxIdx]);
             var eY = yScale.getPixelForValue(exportedData[maxIdx]);
             var labelX = xScale.getPixelForValue(maxIdx);
             var labelY = (pY + eY) / 2;
@@ -171,20 +173,7 @@ function initChart() {
                     fill: false,
                     order: 3
                 },
-                /* Dataset 1: Exported Power — CYAN AREA FILL (invisible line, fill to origin) */
-                {
-                    label: '_cyan_fill',
-                    data: [],
-                    borderColor: 'transparent',
-                    borderWidth: 0,
-                    pointRadius: 0,
-                    pointHoverRadius: 0,
-                    tension: 0.4,
-                    fill: 'origin',
-                    backgroundColor: 'rgba(6, 245, 255, 0.18)',
-                    order: 2
-                },
-                /* Dataset 2: Exported Power — VISIBLE LINE + RED CURTAILMENT FILL */
+                /* Dataset 1: Exported Power (visible line, cyan fill to origin) */
                 {
                     label: s.exportedAreaLabel || 'Exported Power',
                     data: [],
@@ -196,9 +185,22 @@ function initChart() {
                     pointHoverBorderColor: '#FFFFFF',
                     pointHoverBorderWidth: 2,
                     tension: 0.4,
+                    fill: 'origin',
+                    backgroundColor: 'rgba(6, 245, 255, 0.18)',
+                    order: 2
+                },
+                /* Dataset 2: Curtailment Area (invisible line, red fill to dataset 1) */
+                {
+                    label: '_curtailed_envelope',
+                    data: [],
+                    borderColor: 'transparent',
+                    borderWidth: 0,
+                    pointRadius: 0,
+                    pointHoverRadius: 0,
+                    tension: 0.4,
                     fill: {
-                        target: 0,
-                        above: 'rgba(0, 0, 0, 0)',
+                        target: 1,
+                        above: 'rgba(229, 57, 53, 0.4)',
                         below: 'rgba(229, 57, 53, 0.4)'
                     },
                     order: 1
@@ -257,14 +259,12 @@ function initChart() {
                     padding: { top: 6, right: 10, bottom: 6, left: 10 },
                     displayColors: false,
                     filter: function (tooltipItem) {
-                        /* hide the invisible cyan fill dataset from tooltip */
-                        return tooltipItem.datasetIndex !== 1;
+                        /* hide the invisible envelope dataset from tooltip */
+                        return tooltipItem.datasetIndex !== 2;
                     },
                     callbacks: {
                         title: function (items) {
-                            if (items.length > 0) {
-                                return items[0].label;
-                            }
+                            if (items.length > 0) return items[0].label;
                             return '';
                         },
                         label: function (context) {
@@ -272,15 +272,18 @@ function initChart() {
                             return context.dataset.label + ': ' + val + ' ' + unitLabel;
                         },
                         afterBody: function (items) {
-                            if (items.length < 2) return '';
-                            var potVal = 0;
-                            var expVal = 0;
-                            for (var i = 0; i < items.length; i++) {
-                                if (items[i].datasetIndex === 0) potVal = items[i].parsed.y || 0;
-                                if (items[i].datasetIndex === 2) expVal = items[i].parsed.y || 0;
+                            if (items.length < 1) return '';
+                            var chartData = items[0].chart.data;
+                            var dataIdx = items[0].dataIndex;
+                            var eVal  = chartData.datasets[1].data[dataIdx] || 0;
+                            var envVal = chartData.datasets[2].data[dataIdx];
+                            if (envVal == null) envVal = eVal;
+
+                            var curtailed = Math.max(envVal - eVal, 0);
+                            if (curtailed > 0) {
+                                return 'Curtailed Gap: ' + curtailed.toFixed(dec) + ' ' + unitLabel;
                             }
-                            var curtailed = Math.max(potVal - expVal, 0);
-                            return 'Curtailed: ' + curtailed.toFixed(dec) + ' ' + unitLabel;
+                            return '';
                         }
                     }
                 }
@@ -288,6 +291,12 @@ function initChart() {
         },
         plugins: [curtailmentLabelPlugin, crosshairPlugin]
     });
+}
+
+/* ────────── HELPER ────────── */
+function parseCommaList(str) {
+    if (!str) return [];
+    return str.split(',').map(function(k) { return k.trim() }).filter(function(k) { return k.length > 0 });
 }
 
 /* ────────── LIVE DATA FETCH ────────── */
@@ -307,68 +316,54 @@ function fetchLiveData() {
         return;
     }
 
-    /* Resolve entityId format — can be string or object {id, entityType} */
     var entIdStr = (typeof entityId === 'object') ? entityId.id : entityId;
     var entTypeStr = (typeof entityType === 'string') ? entityType : entityId.entityType;
+    if (!entIdStr) { renderNoData(); return; }
 
-    if (!entIdStr) {
-        renderNoData();
-        return;
-    }
+    var actualKeys = parseCommaList(s.actualPowerKeys || 'active_power');
+    var setpointKeys = parseCommaList(s.setpointKeys || 'setpoint_active_power, curtailment_limit, power_limit');
+    var capacityKey = s.plantCapacityKey || 'Plant Total Capacity';
 
-    /* Fetch potential power profile attribute */
-    var profileKey = s.potentialProfileKey || 'potential_power_profile';
-    fetchPotentialProfile(entIdStr, entTypeStr, profileKey);
-
-    /* Fetch active_power time series for today */
-    var actualKey = s.actualPowerKey || 'active_power';
+    var tsKeys = actualKeys.concat(setpointKeys).join(',');
     var now = new Date();
     var startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
     var endTs = now.getTime();
 
-    var url = '/api/plugins/telemetry/' + entTypeStr + '/' + entIdStr +
-        '/values/timeseries?keys=' + actualKey +
-        '&startTs=' + startOfDay + '&endTs=' + endTs +
-        '&limit=10000&agg=NONE';
-
-    try {
-        self.ctx.http.get(url).subscribe(
-            function (data) {
-                if (data && data[actualKey] && data[actualKey].length > 5) {
-                    processLiveTimeSeries(data[actualKey]);
-                } else {
-                    loadSimulation();
-                }
-            },
-            function () {
-                loadSimulation();
-            }
-        );
-    } catch (e) {
-        loadSimulation();
-    }
-}
-
-function fetchPotentialProfile(entityId, entityType, profileKey) {
-    try {
-        var attrService = self.ctx.attributeService;
-        if (!attrService) return;
-
-        var entityObj = { id: entityId, entityType: entityType };
-        attrService.getEntityAttributes(entityObj, 'SERVER_SCOPE', [profileKey])
-            .subscribe(
+    var fetchTs = function() {
+        var url = '/api/plugins/telemetry/' + entTypeStr + '/' + entIdStr +
+            '/values/timeseries?keys=' + tsKeys +
+            '&startTs=' + startOfDay + '&endTs=' + endTs +
+            '&limit=50000&agg=NONE';
+        
+        try {
+            self.ctx.http.get(url).subscribe(
                 function (data) {
-                    var found = data.find(function (a) { return a.key === profileKey; });
-                    if (found) {
-                        try {
-                            self._potentialProfile = (typeof found.value === 'string')
-                                ? JSON.parse(found.value) : found.value;
-                        } catch (e) { /* ignore parse errors */ }
+                    if (data && Object.keys(data).length > 0) {
+                        processLiveTimeSeries(data);
+                    } else {
+                        loadSimulation();
                     }
                 },
-                function () { /* attribute not found, ignore */ }
+                function () { loadSimulation(); }
             );
-    } catch (e) { /* service not available, ignore */ }
+        } catch (e) { loadSimulation(); }
+    };
+
+    var attrService = self.ctx.attributeService;
+    if (attrService && capacityKey) {
+        var entityObj = { id: entIdStr, entityType: entTypeStr };
+        attrService.getEntityAttributes(entityObj, 'SERVER_SCOPE', [capacityKey])
+            .subscribe(
+                function (data) {
+                    var found = data.find(function (a) { return a.key === capacityKey; });
+                    if (found) self._capacityVal = found.value;
+                    fetchTs();
+                },
+                function () { fetchTs(); }
+            );
+    } else {
+        fetchTs();
+    }
 }
 
 /* ────────── PROCESS LIVE TIME SERIES ────────── */
@@ -376,55 +371,118 @@ function processLiveTimeSeries(rawData) {
     isLiveData = true;
     updateStatusBadge('live');
 
-    var labels = [];
-    var dataPotential = [];
-    var dataExported = new Array(96).fill(null);
+    var actualKeys = parseCommaList(s.actualPowerKeys || 'active_power');
+    var setpointKeys = parseCommaList(s.setpointKeys || 'setpoint_active_power, curtailment_limit, power_limit');
 
-    /* Generate 96 time labels (15-min intervals) */
-    for (var i = 0; i < 96; i++) {
-        var totalMin = i * 15;
+    var rawActual = null;
+    for (var i = 0; i < actualKeys.length; i++) {
+        if (rawData[actualKeys[i]] && rawData[actualKeys[i]].length > 0) {
+            rawActual = rawData[actualKeys[i]]; 
+            break;
+        }
+    }
+    
+    var rawSetpoint = null;
+    for (var j = 0; j < setpointKeys.length; j++) {
+        if (rawData[setpointKeys[j]] && rawData[setpointKeys[j]].length > 0) {
+            rawSetpoint = rawData[setpointKeys[j]]; 
+            break;
+        }
+    }
+
+    if (!rawActual) {
+        loadSimulation();
+        return;
+    }
+
+    /* Setpoint data acts as a step function. Sort to ensure chronological order */
+    if (rawSetpoint) {
+        rawSetpoint.sort(function(a, b) { return a.ts - b.ts; });
+    }
+
+    var getSetpointAtTime = function(ts) {
+        if (!rawSetpoint || rawSetpoint.length === 0) return 100;
+        var lastVal = 100; // Assumption: Not curtailed if no state yet
+        for (var k = 0; k < rawSetpoint.length; k++) {
+            if (rawSetpoint[k].ts <= ts) {
+                lastVal = parseFloat(rawSetpoint[k].value);
+            } else { break; }
+        }
+        return isNaN(lastVal) ? 100 : lastVal;
+    };
+
+    /* Capacity configuration */
+    var capacity = parseFloat(self._capacityVal);
+    if (isNaN(capacity) || capacity <= 0) capacity = parseFloat(s.maxPower) || 1000;
+    
+    var capUnit = s.capacityUnit || 'MW';
+    var powUnit = s.unitLabel || 'kW';
+    if (capUnit === 'MW' && powUnit === 'kW') capacity *= 1000;
+    if (capUnit === 'kW' && powUnit === 'MW') capacity *= 0.001;
+
+    var labels = [];
+    var dataExported = new Array(96).fill(null);
+    var dataPotential = generatePotentialCurve(capacity);
+    var dataCurtailedEnv = new Array(96).fill(null);
+
+    var now = new Date();
+    var startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+
+    for (var idx = 0; idx < 96; idx++) {
+        var totalMin = idx * 15;
         var h = Math.floor(totalMin / 60);
         var m = totalMin % 60;
         labels.push((h < 10 ? '0' : '') + h + ':' + (m === 0 ? '00' : (m < 10 ? '0' + m : m)));
     }
 
     /* Map telemetry to 15-min buckets */
-    for (var j = 0; j < rawData.length; j++) {
-        var ts = parseInt(rawData[j].ts);
-        var val = parseFloat(rawData[j].value);
+    for (var p = 0; p < rawActual.length; p++) {
+        var ts = parseInt(rawActual[p].ts);
+        var val = parseFloat(rawActual[p].value);
         if (isNaN(val)) continue;
 
         var date = new Date(ts);
-        var h2 = date.getHours();
-        var m2 = date.getMinutes();
-        var idx = Math.floor((h2 * 60 + m2) / 15);
-
-        if (idx >= 0 && idx < 96) {
-            /* average if multiple values in same bucket */
-            if (dataExported[idx] === null) {
-                dataExported[idx] = val;
-            } else {
-                dataExported[idx] = (dataExported[idx] + val) / 2;
-            }
+        var tIdx = Math.floor((date.getHours() * 60 + date.getMinutes()) / 15);
+        if (tIdx >= 0 && tIdx < 96) {
+            if (dataExported[tIdx] === null) dataExported[tIdx] = val;
+            else dataExported[tIdx] = (dataExported[tIdx] + val) / 2;
         }
     }
 
-    /* Potential profile: use attribute if available, else generate from simulation */
-    if (self._potentialProfile && self._potentialProfile.length === 96) {
-        dataPotential = self._potentialProfile;
-    } else {
-        dataPotential = generatePotentialCurve();
+    /* Calculate curtailment envelope based on setpoint step-functions */
+    for (var b = 0; b < 96; b++) {
+        if (dataExported[b] === null) {
+            dataCurtailedEnv[b] = null;
+            continue;
+        }
+        
+        /* Check the setpoint at the middle of this 15-min bucket to be representative */
+        var bucketTs = startOfDay + (b * 15 + 7.5) * 60 * 1000;
+        var setpointPct = getSetpointAtTime(bucketTs);
+        var allowedPower = capacity * (setpointPct / 100);
+
+        /* 
+         * Important Logic:
+         * We only render the red area if the grid command restricted the plant (setpointPct < 99)
+         * AND the theoretical potential power is actually higher than the allowed constraint.
+         */
+        if (setpointPct < 99 && dataPotential[b] > allowedPower) {
+            dataCurtailedEnv[b] = Math.max(dataPotential[b], dataExported[b]);
+        } else {
+            /* Not curtailed: Envelope matches exported line perfectly (no red gap) */
+            dataCurtailedEnv[b] = dataExported[b];
+        }
     }
 
-    /* Filter window to 5AM (idx 20) to 7PM (idx 76) inclusive */
     var startIdx = 20;
     var endIdx = 77;
     labels = labels.slice(startIdx, endIdx);
     dataPotential = dataPotential.slice(startIdx, endIdx);
     dataExported = dataExported.slice(startIdx, endIdx);
+    dataCurtailedEnv = dataCurtailedEnv.slice(startIdx, endIdx);
 
-    renderChartData(labels, dataPotential, dataExported);
-    updateTooltipSummary(dataPotential, dataExported);
+    renderChartData(labels, dataPotential, dataExported, dataCurtailedEnv);
+    updateTooltipSummary(dataPotential, dataExported, dataCurtailedEnv);
 }
 
 /* ────────── SIMULATION ────────── */
@@ -432,14 +490,13 @@ function loadSimulation() {
     isLiveData = false;
     updateStatusBadge('simulated');
 
-    var maxPower = parseFloat(s.maxPower) || 1000;
+    var capacity = parseFloat(s.maxPower) || 1000;
     var exportLimit = parseFloat(s.exportLimitKw) || 800;
-    var sunrise = parseFloat(s.sunriseHour) || 6;
-    var sunset = parseFloat(s.sunsetHour) || 18;
-
+    
     var labels = [];
-    var dataPotential = [];
+    var dataPotential = generatePotentialCurve(capacity);
     var dataExported = [];
+    var dataCurtailedEnv = [];
 
     /* Seed for deterministic noise */
     var seed = 42;
@@ -455,22 +512,18 @@ function loadSimulation() {
         labels.push((h < 10 ? '0' : '') + h + ':' + (m === 0 ? '00' : (m < 10 ? '0' + m : m)));
 
         var hourFrac = totalMin / 60;
+        var potential = dataPotential[i];
+        
+        /* simulate base clouds */
+        var clouds = (1 + (seededRandom() - 0.5) * 0.06);
+        potential *= clouds;
+        dataPotential[i] = potential; /* update the ideal curve to match */
 
-        /* Potential: sine curve between sunrise and sunset */
-        var potential = 0;
-        if (hourFrac > sunrise && hourFrac < sunset) {
-            var x = (hourFrac - sunrise) / (sunset - sunrise) * Math.PI;
-            potential = Math.sin(x) * maxPower;
-            /* small cloud variations (±3%) */
-            potential *= (1 + (seededRandom() - 0.5) * 0.06);
-            potential = Math.max(0, potential);
-        }
-        dataPotential.push(potential);
-
-        /* Exported: capped at export limit with realistic ramp behavior */
         var exported = potential;
+        var isCurtailedRule = false;
+
         if (exported > exportLimit) {
-            /* Apply ramp smoothing near the limit */
+            isCurtailedRule = true;
             var rampZone = exportLimit * 0.05;
             if (exported > exportLimit + rampZone) {
                 exported = exportLimit;
@@ -478,35 +531,40 @@ function loadSimulation() {
                 var t = (exported - exportLimit) / rampZone;
                 exported = exportLimit - rampZone * (1 - t) * 0.1;
             }
-            /* slight noise on the flat ceiling */
             exported += (seededRandom() - 0.5) * exportLimit * 0.01;
             exported = Math.min(exported, exportLimit);
         }
 
-        /* Simulate a brief grid dispatch event (step-down) around 15:30-16:00 */
         if (hourFrac >= 15.5 && hourFrac <= 16.0 && potential > exportLimit * 0.5) {
+            isCurtailedRule = true;
             exported = Math.min(exported, exportLimit * 0.85);
         }
 
-        /* Simulate brief cloud transient around 13:00 */
         if (hourFrac >= 13.0 && hourFrac <= 13.25) {
             var cloudFactor = 0.7 + seededRandom() * 0.15;
             exported = Math.min(exported, potential * cloudFactor);
+            /* This is a natural cloud, not curtailment */
         }
 
         exported = Math.max(0, exported);
         dataExported.push(exported);
+
+        if (isCurtailedRule && potential > exported) {
+            dataCurtailedEnv.push(Math.max(potential, exported));
+        } else {
+            dataCurtailedEnv.push(exported);
+        }
     }
 
-    /* Filter window to 5AM (idx 20) to 7PM (idx 76) inclusive */
     var startIdx = 20;
     var endIdx = 77;
     labels = labels.slice(startIdx, endIdx);
     dataPotential = dataPotential.slice(startIdx, endIdx);
     dataExported = dataExported.slice(startIdx, endIdx);
+    dataCurtailedEnv = dataCurtailedEnv.slice(startIdx, endIdx);
 
-    renderChartData(labels, dataPotential, dataExported);
-    updateTooltipSummary(dataPotential, dataExported);
+    renderChartData(labels, dataPotential, dataExported, dataCurtailedEnv);
+    updateTooltipSummary(dataPotential, dataExported, dataCurtailedEnv);
 }
 
 /* ────────── NO DATA STATE ────────── */
@@ -521,8 +579,8 @@ function renderNoData() {
 }
 
 /* ────────── GENERATE POTENTIAL CURVE ────────── */
-function generatePotentialCurve() {
-    var maxPower = parseFloat(s.maxPower) || 1000;
+function generatePotentialCurve(capacityVal) {
+    var maxPower = capacityVal || parseFloat(s.maxPower) || 1000;
     var sunrise = parseFloat(s.sunriseHour) || 6;
     var sunset = parseFloat(s.sunsetHour) || 18;
     var curve = [];
@@ -540,19 +598,18 @@ function generatePotentialCurve() {
 }
 
 /* ────────── RENDER CHART DATA ────────── */
-function renderChartData(labels, potential, exported) {
+function renderChartData(labels, potential, exported, curtailedEnv) {
     if (!myChart) return;
 
     myChart.data.labels = labels;
     myChart.data.datasets[0].data = potential;
     myChart.data.datasets[1].data = exported;
-    myChart.data.datasets[2].data = exported;
+    myChart.data.datasets[2].data = curtailedEnv;
     myChart.update('none');
 }
 
 /* ────────── STATUS BADGE ────────── */
 function updateStatusBadge(state) {
-    /* state: 'live', 'simulated', 'nodata' */
     $statusDot.removeClass('live simulated nodata');
 
     if (state === 'live') {
@@ -562,19 +619,18 @@ function updateStatusBadge(state) {
         $statusDot.addClass('simulated');
         $statusText.text('SIMULATED');
     } else {
-        /* no data */
-        $statusDot.addClass('nodata'); /* css needs this */
+        $statusDot.addClass('nodata');
         $statusText.text('NO DATA');
     }
 }
 
-
 /* ────────── DYNAMIC TOOLTIP ────────── */
-function updateTooltipSummary(potential, exported) {
+function updateTooltipSummary(potential, exported, curtailedEnv) {
     if (s.tooltipText) return;
 
     var dec = (s.decimals !== undefined) ? parseInt(s.decimals) : 1;
     var unitLabel = s.unitLabel || 'kW';
+    var marginPct = (s.theoreticalMargin !== undefined) ? parseFloat(s.theoreticalMargin) : 10;
     var intervalHours = 0.25; /* 15 minutes */
 
     var totalPotentialEnergy = 0;
@@ -586,7 +642,9 @@ function updateTooltipSummary(potential, exported) {
     for (var i = 0; i < potential.length; i++) {
         var pVal = potential[i] || 0;
         var eVal = (exported[i] !== null && exported[i] !== undefined) ? exported[i] : 0;
-        var curtailed = Math.max(pVal - eVal, 0);
+        var envVal = (curtailedEnv && curtailedEnv[i] !== null) ? curtailedEnv[i] : eVal;
+        
+        var curtailed = Math.max(envVal - eVal, 0);
 
         totalPotentialEnergy += pVal * intervalHours;
         totalExportedEnergy += eVal * intervalHours;
@@ -596,7 +654,6 @@ function updateTooltipSummary(potential, exported) {
         if (eVal > peakExported) peakExported = eVal;
     }
 
-    /* Convert kWh to MWh if values are large */
     var energyUnit = 'kWh';
     var energyDivisor = 1;
     if (totalPotentialEnergy > 1000) {
@@ -604,15 +661,17 @@ function updateTooltipSummary(potential, exported) {
         energyDivisor = 1000;
     }
 
-    var curtPct = totalPotentialEnergy > 0
+    var errorMargin = totalCurtailedEnergy * (marginPct / 100);
+
+    var curtainPct = totalPotentialEnergy > 0 
         ? ((totalCurtailedEnergy / totalPotentialEnergy) * 100).toFixed(1) : '0.0';
 
     var lines = [
         'Peak Potential: ' + peakPotential.toFixed(dec) + ' ' + unitLabel +
         ' | Peak Exported: ' + peakExported.toFixed(dec) + ' ' + unitLabel,
         'Curtailed Energy: ' + (totalCurtailedEnergy / energyDivisor).toFixed(dec) +
-        ' ' + energyUnit + ' (' + curtPct + '% of potential)',
-        isLiveData ? 'Live telemetry from today.' : 'Simulated data for demonstration.'
+        ' ' + energyUnit + ' (± ' + (errorMargin / energyDivisor).toFixed(dec) + ')',
+        isLiveData ? 'Live telemetry evaluated.' : 'Simulated data for demonstration.'
     ];
 
     $tooltip.html(lines.join('<br>'));
@@ -620,8 +679,6 @@ function updateTooltipSummary(potential, exported) {
 
 /* ────────── LIFECYCLE: DATA UPDATED ────────── */
 self.onDataUpdated = function () {
-    /* For a Latest Values widget, data updates may signal entity changes.
-       Re-fetch live data when the datasource updates. */
     fetchLiveData();
 };
 
@@ -631,14 +688,7 @@ self.onResize = function () {
     var h = $el.height();
     if (!w || !h) return;
 
-    /* Em budget (vertical):
-       header(0.65) + chart(flex:1 ≈ 5em min) + footer(0.45) + padding(0.6) ≈ 6.7em
-    */
     var fromH = (h - 8) / 7.5;
-
-    /* Em budget (horizontal):
-       y-axis-title(0.5) + chart(flex:1 ≈ 10em) + padding(1.0) ≈ 14em
-    */
     var fromW = w / 14;
 
     baseFontSize = Math.min(fromH, fromW);
@@ -647,10 +697,8 @@ self.onResize = function () {
 
     $el.find('.curt-card').css('font-size', baseFontSize + 'px');
 
-    /* Scale Chart.js fonts proportionally */
     if (myChart) {
         var tickFont = Math.max(8, Math.min(14, baseFontSize * 0.5));
-
         myChart.options.scales.x.ticks.font.size = tickFont;
         myChart.options.scales.y.ticks.font.size = tickFont;
         myChart.resize();

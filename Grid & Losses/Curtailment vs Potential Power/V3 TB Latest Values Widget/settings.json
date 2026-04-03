@@ -35,11 +35,39 @@
         "helpText": "Label shown inside the curtailment (red) zone on the chart."
     },
     {
-        "id": "actualPowerKey",
-        "name": "Actual Power Telemetry Key",
+        "id": "actualPowerKeys",
+        "name": "Actual Power Telemetry Keys",
         "type": "text",
         "default": "active_power",
-        "helpText": "Time-series telemetry key for real exported power. Used when connected to a live data source."
+        "helpText": "Comma-separated time-series telemetry keys for real exported power. Evaluated in order for fallback."
+    },
+    {
+        "id": "setpointKeys",
+        "name": "Setpoint Telemetry Keys",
+        "type": "text",
+        "default": "setpoint_active_power, curtailment_limit, power_limit",
+        "helpText": "Comma-separated telemetry keys representing the maximum allowed percentage (%) of plant capacity. Evaluated in order."
+    },
+    {
+        "id": "plantCapacityKey",
+        "name": "Plant Capacity Attribute",
+        "type": "text",
+        "default": "Plant Total Capacity",
+        "helpText": "Server attribute key for the plant's total capacity."
+    },
+    {
+        "id": "capacityUnit",
+        "name": "Capacity Attribute Unit",
+        "type": "text",
+        "default": "MW",
+        "helpText": "Unit of the capacity attribute (MW or kW). Will be converted to the widget's Power Unit if necessary."
+    },
+    {
+        "id": "theoreticalMargin",
+        "name": "Error Margin (%)",
+        "type": "number",
+        "default": 10,
+        "helpText": "Percentage margin of error for the theoretical potential calculation."
     },
     {
         "id": "potentialProfileKey",
