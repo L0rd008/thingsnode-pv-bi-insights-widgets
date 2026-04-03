@@ -4,14 +4,16 @@
    Chart.js envelope chart with dynamic bounds & settings memory
    ════════════════════════════════════════════════════ */
 
-var $el, s, myChart;
+var $el, s, myChart, baseFontSize;
 var $title, $statusDot, $statusText;
 var $yTitle, $tooltip, $modal;
+var $legendPotential, $legendExported, $legendCurtailed;
 var isLiveData = false;
 
 /* ────────── LOCAL STORAGE CONFIG ────────── */
 function loadSettings() {
     var defaultSettings = {
+        timeframe: 'today',
         actualPowerKeys: 'active_power',
         setpointKeys: 'setpoint_active_power, curtailment_limit',
         plantCapacityKey: 'Plant Total Capacity',
@@ -32,6 +34,7 @@ function loadSettings() {
 }
 
 function saveSettings() {
+    s.timeframe = $('#set-timeframe').val();
     s.actualPowerKeys = $('#set-actual-keys').val();
     s.setpointKeys = $('#set-setpoint-keys').val();
     s.plantCapacityKey = $('#set-capacity-key').val();
@@ -47,6 +50,7 @@ function saveSettings() {
 }
 
 function populateModal() {
+    $('#set-timeframe').val(s.timeframe || 'today');
     $('#set-actual-keys').val(s.actualPowerKeys);
     $('#set-setpoint-keys').val(s.setpointKeys);
     $('#set-capacity-key').val(s.plantCapacityKey);
@@ -63,11 +67,14 @@ self.onInit = function () {
 
     /* ── cache DOM ── */
     $title = $el.find('.js-title');
-    $statusDot = $el.find('#status-dot');
-    $statusText = $el.find('#status-text');
+    $statusDot = $el.find('.js-status-dot');
+    $statusText = $el.find('.js-status-text');
     $yTitle = $el.find('.js-y-title');
-    $tooltip = $el.find('#custom-tooltip');
+    $tooltip = $el.find('.js-tooltip');
     $modal = $el.find('#settings-modal');
+    $legendPotential = $el.find('.js-legend-potential');
+    $legendExported = $el.find('.js-legend-exported');
+    $legendCurtailed = $el.find('.js-legend-curtailed');
 
     updateDom();
     bindSettingsUI();
@@ -80,10 +87,16 @@ self.onInit = function () {
 
 /* ────────── DOM SETUP ────────── */
 function updateDom() {
+    $title.text(s.widgetTitle || 'CURTAILMENT VS POTENTIAL POWER');
+
     var unitLabel = s.displayUnit || 'kW';
     if ($yTitle.length) {
         $yTitle.text('POWER (' + unitLabel + ')');
     }
+
+    if ($legendPotential.length) $legendPotential.text(s.potentialLineLabel || 'Potential Power');
+    if ($legendExported.length) $legendExported.text(s.exportedAreaLabel || 'Exported Power');
+    if ($legendCurtailed.length) $legendCurtailed.text(s.curtailmentLabel || 'Curtailed Energy');
 }
 
 function bindSettingsUI() {
@@ -105,6 +118,7 @@ function bindSettingsUI() {
 }
 
 function updateStatusBadge(state) {
+    if (!$statusDot.length) return;
     $statusDot.removeClass('live simulated nodata');
     if (state === 'live') {
         $statusDot.addClass('live');
@@ -120,9 +134,72 @@ function updateStatusBadge(state) {
 
 /* ────────── CHART INITIALIZATION ────────── */
 function initChart() {
-    var canvasEl = $el.find('#curtailment-chart')[0];
+    var canvasEl = $el.find('.js-canvas')[0];
     if (!canvasEl) return;
     var ctx = canvasEl.getContext('2d');
+
+    var unitLabel = s.displayUnit || 'kW';
+    var dec = (s.decimals !== undefined) ? parseInt(s.decimals) : 1;
+    var showCurtLabel = (s.showCurtailmentLabel !== undefined) ? s.showCurtailmentLabel : true;
+    var curtLabelText = s.curtailmentLabel || 'Curtailed Energy';
+
+    var curtailmentLabelPlugin = {
+        id: 'curtailmentLabel',
+        afterDraw: function (chart) {
+            if (!showCurtLabel) return;
+            var datasets = chart.data.datasets;
+            if (datasets.length < 3) return;
+
+            var potentialData = datasets[0].data;
+            var exportedData = datasets[1].data;
+            var envData = datasets[2].data;
+            if (!potentialData || !exportedData || potentialData.length === 0) return;
+
+            var area = chart.chartArea;
+            if (!area) return;
+            var xScale = chart.scales.x;
+            var yScale = chart.scales.y;
+            var cCtx = chart.ctx;
+
+            var maxCurt = 0;
+            var maxIdx = -1;
+            for (var i = 0; i < envData.length; i++) {
+                var pVal = potentialData[i];
+                var eVal = exportedData[i];
+                var envVal = envData[i];
+                if (pVal == null || eVal == null || envVal == null) continue;
+                var curtVal = envVal - eVal;
+                if (curtVal > maxCurt) {
+                    maxCurt = curtVal;
+                    maxIdx = i;
+                }
+            }
+
+            if (maxIdx < 0 || maxCurt < 1) return;
+
+            var pY = yScale.getPixelForValue(envData[maxIdx]);
+            var eY = yScale.getPixelForValue(exportedData[maxIdx]);
+            var labelX = xScale.getPixelForValue(maxIdx);
+            var labelY = (pY + eY) / 2;
+
+            labelX = Math.max(area.left + 30, Math.min(area.right - 30, labelX));
+            labelY = Math.max(area.top + 10, Math.min(area.bottom - 10, labelY));
+
+            cCtx.save();
+            var fontSize = Math.max(10, Math.min(16, (baseFontSize || 14) * 0.55));
+            cCtx.font = '700 ' + fontSize + 'px Roboto, sans-serif';
+            cCtx.fillStyle = 'rgba(255, 255, 255, 0.85)';
+            cCtx.textAlign = 'center';
+            cCtx.textBaseline = 'middle';
+
+            cCtx.shadowColor = 'rgba(0, 0, 0, 0.6)';
+            cCtx.shadowBlur = 4;
+            cCtx.shadowOffsetX = 1;
+            cCtx.shadowOffsetY = 1;
+            cCtx.fillText(curtLabelText, labelX, labelY);
+            cCtx.restore();
+        }
+    };
 
     var crosshairPlugin = {
         id: 'crosshair',
@@ -132,10 +209,16 @@ function initChart() {
                 var x = activePoint.element.x;
                 var yAxis = chart.scales.y;
                 var cCtx = chart.ctx;
-                cCtx.save(); cCtx.beginPath();
-                cCtx.moveTo(x, yAxis.top); cCtx.lineTo(x, yAxis.bottom);
-                cCtx.lineWidth = 1; cCtx.strokeStyle = 'rgba(6, 245, 255, 0.25)';
-                cCtx.setLineDash([3, 3]); cCtx.stroke(); cCtx.setLineDash([]); cCtx.restore();
+                cCtx.save();
+                cCtx.beginPath();
+                cCtx.moveTo(x, yAxis.top);
+                cCtx.lineTo(x, yAxis.bottom);
+                cCtx.lineWidth = 1;
+                cCtx.strokeStyle = 'rgba(6, 245, 255, 0.25)';
+                cCtx.setLineDash([3, 3]);
+                cCtx.stroke();
+                cCtx.setLineDash([]);
+                cCtx.restore();
             }
         }
     };
@@ -146,65 +229,167 @@ function initChart() {
             labels: [],
             datasets: [
                 {
-                    label: 'Potential Power',
+                    label: s.potentialLineLabel || 'Potential Power',
                     data: [],
                     borderColor: 'rgba(255, 255, 255, 0.5)',
-                    borderWidth: 2, borderDash: [5, 5],
-                    pointRadius: 0, pointHoverRadius: 0,
-                    tension: 0.4, fill: false, order: 2
+                    borderWidth: 2,
+                    borderDash: [6, 4],
+                    pointRadius: 0,
+                    pointHoverRadius: 3,
+                    pointHoverBackgroundColor: 'rgba(255,255,255,0.7)',
+                    tension: 0.4,
+                    fill: false,
+                    order: 3
                 },
                 {
-                    label: 'Exported Power',
+                    label: s.exportedAreaLabel || 'Exported Power',
                     data: [],
                     borderColor: '#06F5FF',
-                    backgroundColor: 'rgba(6, 245, 255, 0.2)',
-                    borderWidth: 2, pointRadius: 0,
-                    pointHoverRadius: 4, pointHoverBackgroundColor: '#06F5FF',
-                    tension: 0.4, fill: 'origin', order: 0
+                    borderWidth: 2,
+                    pointRadius: 0,
+                    pointHoverRadius: 4,
+                    pointHoverBackgroundColor: '#06F5FF',
+                    pointHoverBorderColor: '#FFFFFF',
+                    pointHoverBorderWidth: 2,
+                    tension: 0.4,
+                    fill: 'origin',
+                    backgroundColor: 'rgba(6, 245, 255, 0.18)',
+                    order: 2
                 },
                 {
                     label: '_curtailed_envelope',
                     data: [],
                     borderColor: 'transparent',
-                    borderWidth: 0, pointRadius: 0, pointHoverRadius: 0,
-                    tension: 0.4, fill: {
+                    borderWidth: 0,
+                    pointRadius: 0,
+                    pointHoverRadius: 0,
+                    tension: 0.4,
+                    fill: {
                         target: 1,
                         above: 'rgba(229, 57, 53, 0.4)',
                         below: 'rgba(229, 57, 53, 0.4)'
-                    }, order: 1
+                    },
+                    order: 1
                 }
             ]
         },
         options: {
             responsive: true,
             maintainAspectRatio: false,
-            interaction: { mode: 'index', intersect: false },
-            plugins: {
-                legend: { display: false },
-                tooltip: {
-                    enabled: false,
-                    external: function(context) { /* Using completely custom HTML tooltip overlay */ }
-                }
+            animation: false,
+            interaction: {
+                mode: 'index',
+                axis: 'x',
+                intersect: false
+            },
+            layout: {
+                padding: { top: 4, right: 6, bottom: 0, left: 0 }
             },
             scales: {
                 x: {
-                    grid: { color: 'rgba(255, 255, 255, 0.05)', drawBorder: false },
-                    ticks: { color: '#90A4AE', autoSkip: true, maxTicksLimit: 8, font: { size: 10 } }
+                    grid: { color: 'rgba(255, 255, 255, 0.06)', drawBorder: false },
+                    ticks: { color: '#90A4AE', font: { size: 10, family: 'Roboto, sans-serif' }, maxTicksLimit: 9, maxRotation: 0 }
                 },
                 y: {
                     beginAtZero: true,
-                    grid: { color: 'rgba(255, 255, 255, 0.05)', drawBorder: false },
-                    ticks: { color: '#90A4AE', font: { size: 10 } }
+                    min: 0,
+                    grid: { color: 'rgba(255, 255, 255, 0.06)', drawBorder: false },
+                    ticks: { color: '#90A4AE', font: { size: 10, family: 'Roboto, sans-serif' } }
+                }
+            },
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    enabled: true,
+                    backgroundColor: 'rgba(2, 10, 67, 0.95)',
+                    titleColor: '#90A4AE',
+                    bodyColor: '#FFFFFF',
+                    bodyFont: { weight: '600', family: 'Roboto, sans-serif' },
+                    borderColor: 'rgba(6, 245, 255, 0.3)',
+                    borderWidth: 1,
+                    cornerRadius: 4,
+                    padding: { top: 6, right: 10, bottom: 6, left: 10 },
+                    displayColors: false,
+                    filter: function (tooltipItem) { return tooltipItem.datasetIndex !== 2; },
+                    callbacks: {
+                        title: function (items) {
+                            if (items.length > 0) return items[0].label;
+                            return '';
+                        },
+                        label: function (context) {
+                            var val = (context.parsed.y || 0).toFixed(dec);
+                            return context.dataset.label + ': ' + val + ' ' + unitLabel;
+                        },
+                        afterBody: function (items) {
+                            if (items.length < 1) return '';
+                            var chartData = items[0].chart.data;
+                            var dataIdx = items[0].dataIndex;
+                            var eVal  = chartData.datasets[1].data[dataIdx] || 0;
+                            var envVal = chartData.datasets[2].data[dataIdx];
+                            if (envVal == null) envVal = eVal;
+
+                            var curtailed = Math.max(envVal - eVal, 0);
+                            if (curtailed > 0) {
+                                return 'Loss Power: ' + curtailed.toFixed(dec) + ' ' + unitLabel;
+                            }
+                            return '';
+                        }
+                    }
                 }
             }
         },
-        plugins: [crosshairPlugin]
+        plugins: [curtailmentLabelPlugin, crosshairPlugin]
     });
 }
 
 function parseCommaList(str) {
     if (!str) return [];
     return str.split(',').map(function(k) { return k.trim() }).filter(function(k) { return k.length > 0 });
+}
+
+function getTimeBounds(timeframeStr) {
+    var now = new Date();
+    var startTs, endTs;
+    var y = now.getFullYear();
+    var m = now.getMonth();
+    var d = now.getDate();
+
+    if (timeframeStr === 'today') {
+        startTs = new Date(y, m, d, 5, 0, 0).getTime();
+        endTs = new Date(y, m, d, 19, 0, 0).getTime();
+    } 
+    else if (timeframeStr === 'yesterday') {
+        startTs = new Date(y, m, d - 1, 5, 0, 0).getTime();
+        endTs = new Date(y, m, d - 1, 19, 0, 0).getTime();
+    }
+    else if (timeframeStr === 'day_before') {
+        startTs = new Date(y, m, d - 2, 5, 0, 0).getTime();
+        endTs = new Date(y, m, d - 2, 19, 0, 0).getTime();
+    }
+    else if (timeframeStr === 'this_week') {
+        var dayOfWeek = now.getDay() || 7; // make Sunday=7, Monday=1
+        startTs = new Date(y, m, d - dayOfWeek + 1, 0, 0, 0).getTime();
+        endTs = now.getTime();
+    }
+    else if (timeframeStr === 'prev_week') {
+        var dayOfWeek2 = now.getDay() || 7;
+        startTs = new Date(y, m, d - dayOfWeek2 - 6, 0, 0, 0).getTime();
+        endTs = new Date(y, m, d - dayOfWeek2 + 1, 23, 59, 59).getTime();
+    }
+    else if (timeframeStr === 'this_month') {
+        startTs = new Date(y, m, 1, 0, 0, 0).getTime();
+        endTs = now.getTime();
+    }
+    else {
+        startTs = new Date(y, m, d, 5, 0, 0).getTime();
+        endTs = new Date(y, m, d, 19, 0, 0).getTime();
+    }
+
+    if (endTs > now.getTime()) {
+        endTs = now.getTime(); /* Cap future intervals to now for live accuracy */
+    }
+
+    return { minTime: startTs, maxTime: Math.max(startTs + 1, endTs) };
 }
 
 /* ────────── LIVE DATA FETCH ────────── */
@@ -227,15 +412,15 @@ function fetchLiveData() {
     var capacityKey = s.plantCapacityKey;
     var tsKeys = actualKeys.concat(setpointKeys).join(',');
 
-    /* Uses Dashboard Timeseries Window */
-    var timeWindow = self.ctx.timeWindow || {};
-    var endTs = timeWindow.maxTime || Date.now();
-    var startTs = timeWindow.minTime || (endTs - 24*3600*1000);
+    /* Manual timeframe override computation */
+    var bounds = getTimeBounds(s.timeframe || 'today');
+    var startTs = bounds.minTime;
+    var endTs = bounds.maxTime;
 
     var fetchTs = function() {
         var url = '/api/plugins/telemetry/' + entTypeStr + '/' + entIdStr +
             '/values/timeseries?keys=' + tsKeys +
-            '&startTs=' + startTs + '&endTs=' + endTs +
+            '&startTs=' + (startTs - 24*3600*1000) + '&endTs=' + endTs + /* lookback for setpoint steps */
             '&limit=50000&agg=NONE';
         
         try {
@@ -325,7 +510,7 @@ function processLiveTimeSeries(rawData, minTime, maxTime) {
     if (capUnit === 'kW' && powUnit === 'MW') capacity *= 0.001;
 
     /* Generate Time Buckets */
-    var bucketCount = 96; /* Constant resolution to prevent chart lagging */
+    var bucketCount = 96; /* Constant resolution */
     var bucketSizeMs = (maxTime - minTime) / bucketCount;
 
     var labels = [];
@@ -349,10 +534,11 @@ function processLiveTimeSeries(rawData, minTime, maxTime) {
         var bT = minTime + (i2 * bucketSizeMs);
         var d = new Date(bT);
         var hrFrac = d.getHours() + (d.getMinutes() / 60);
-        var sunrise = 6; var sunset = 18;
+        var sunrise = 5; var sunset = 19;
         if (hrFrac < sunrise || hrFrac > sunset) {
             dataPotential.push(0);
         } else {
+            /* Squeeze sin curve tightly into 5:00 to 19:00 boundary */
             var frac = (hrFrac - sunrise) / (sunset - sunrise);
             dataPotential.push(capacity * Math.sin(frac * Math.PI));
         }
@@ -408,7 +594,7 @@ function loadSimulation(minTime, maxTime) {
         labels.push(new Intl.DateTimeFormat('default', formatOptions).format(new Date(bt)));
         
         var d = new Date(bt); var hrFrac = d.getHours() + (d.getMinutes()/60);
-        var p = (hrFrac < 6 || hrFrac > 18) ? 0 : capacity * Math.sin(((hrFrac-6)/12)*Math.PI);
+        var p = (hrFrac < 5 || hrFrac > 19) ? 0 : capacity * Math.sin(((hrFrac-5)/14)*Math.PI);
         potential.push(p);
 
         var exp = p * (1 - 0.1 * Math.random());
@@ -428,7 +614,9 @@ function renderNoData() {
     isLiveData = false;
     updateStatusBadge('nodata');
     if (myChart) { myChart.data.datasets.forEach(function (ds) { ds.data = []; }); myChart.update(); }
-    $tooltip.html('No datasource configured. Select an Entity alias with timeseries capability.');
+    if ($tooltip && $tooltip.length) {
+        $tooltip.html('No datasource configured. Select an Entity alias with timeseries capability.');
+    }
 }
 
 function renderChartData(labels, p, e, c) {
@@ -441,6 +629,8 @@ function renderChartData(labels, p, e, c) {
 }
 
 function updateSummary(potential, exported, curtailedEnv, bucketSizeMs) {
+    if (!$tooltip || !$tooltip.length) return;
+    
     var totalCurtEnergy = 0;
     var fractionOfHour = bucketSizeMs / (1000 * 3600);
 
@@ -455,16 +645,20 @@ function updateSummary(potential, exported, curtailedEnv, bucketSizeMs) {
     if (totalCurtEnergy > 1000) { divisor = 1000; unit = (unit==='kW')?'MWh':'GWh'; }
     else { unit = unit + 'h'; }
 
-    var errorMarg = totalCurtEnergy * (s.theoreticalMargin / 100);
+    var errorMarg = totalCurtEnergy * ((parseFloat(s.theoreticalMargin) || 10) / 100);
 
     var res = isLiveData ? 'Live Data Analyzed' : 'Simulated Data';
-    $tooltip.html(res + ' | <b>Curtailed Energy in Window: ' + 
+    $tooltip.html(res + ' | <b>Total Curtailed Energy in View: ' + 
         (totalCurtEnergy/divisor).toFixed(2) + ' ' + unit + 
         ' (± ' + (errorMarg/divisor).toFixed(2) + ')</b>');
 }
 
 self.onResize = function () {
-    if (myChart && $el) { myChart.resize(); }
+    if (myChart && $el) { 
+        var cardHeight = $el.find('.curt-card').height() || 300;
+        baseFontSize = Math.max(10, cardHeight * 0.05);
+        myChart.resize(); 
+    }
 };
 
 self.onDestroy = function () {
