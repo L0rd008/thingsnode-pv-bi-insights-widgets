@@ -1,41 +1,66 @@
 <div class="pv-curtailment-widget">
-    <div class="curt-card">
-        <!-- Header -->
-        <div class="card-header">
-            <div class="card-title js-title">CURTAILMENT VS POTENTIAL POWER</div>
-            <div class="header-status">
-                <span class="status-dot js-status-dot nodata"></span>
-                <span class="status-text js-status-text">NO DATA</span>
-            </div>
+    <div class="header-section">
+        <div class="title-container">
+            Curtailment vs Potential
+            <span class="status-badge nodata" id="status-dot"></span>
+            <span class="status-text" id="status-text">WAITING</span>
         </div>
+        <div id="settings-btn" class="settings-btn" title="Widget Settings">⚙️</div>
+    </div>
+    
+    <div class="chart-container">
+        <canvas id="curtailment-chart"></canvas>
+    </div>
+    <div id="custom-tooltip" class="custom-tooltip">Hover over the chart to see details</div>
 
-        <!-- Chart Area -->
-        <div class="chart-body">
-            <div class="y-axis-title js-y-title">POWER (kW)</div>
-            <div class="chart-container">
-                <canvas class="js-canvas"></canvas>
+    <!-- Inline Settings Modal -->
+    <div id="settings-modal" class="settings-modal-overlay" style="display: none;">
+        <div class="settings-modal-content">
+            <h3>Timeseries Settings</h3>
+            
+            <div class="setting-group">
+                <label>Actual Power Keys (Comma list)</label>
+                <input type="text" id="set-actual-keys" value="active_power">
             </div>
-        </div>
 
-        <!-- Footer Legend -->
-        <div class="card-footer">
-            <div class="legend-item">
-                <div class="legend-line dashed"></div>
-                <div class="legend-label js-legend-potential">Potential Power</div>
+            <div class="setting-group">
+                <label>Setpoint Keys (Comma list)</label>
+                <input type="text" id="set-setpoint-keys" value="setpoint_active_power, curtailment_limit">
             </div>
-            <div class="legend-item">
-                <div class="legend-line solid"></div>
-                <div class="legend-label js-legend-exported">Exported Power</div>
-            </div>
-            <div class="legend-item">
-                <div class="legend-block curtailed"></div>
-                <div class="legend-label js-legend-curtailed">Curtailed Energy</div>
-            </div>
-        </div>
 
-        <!-- Tooltip Overlay -->
-        <div class="tooltip-container js-tooltip-container">
-            <div class="tooltip-content js-tooltip">Hover over the chart to see details</div>
+            <div class="setting-group">
+                <label>Capacity Attribute Key</label>
+                <input type="text" id="set-capacity-key" value="Plant Total Capacity">
+            </div>
+
+            <div class="setting-row">
+                <div class="setting-group">
+                    <label>Capacity Unit</label>
+                    <select id="set-cap-unit">
+                        <option value="MW">MW</option>
+                        <option value="kW">kW</option>
+                    </select>
+                </div>
+                <div class="setting-group">
+                    <label>Display Unit</label>
+                    <input type="text" id="set-disp-unit" value="kW" style="width: 60px;">
+                </div>
+            </div>
+
+            <div class="setting-group">
+                <label>Theoretical Error Margin %</label>
+                <input type="number" id="set-err-margin" value="10" step="1" min="0" max="100">
+            </div>
+            
+            <div class="setting-group">
+                <label>Fallback Peak Power (kW)</label>
+                <input type="number" id="set-fallback-power" value="1000" step="1">
+            </div>
+
+            <div class="settings-modal-actions">
+                <button id="btn-cancel" class="btn-cancel">Cancel</button>
+                <button id="btn-save" class="btn-save">Save & Reload</button>
+            </div>
         </div>
     </div>
 </div>
