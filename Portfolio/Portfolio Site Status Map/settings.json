@@ -21,6 +21,12 @@
     "id": "strictDuckTyping",
     "name": "Use Duck Typing (Map if entity has lat, lon, and capacity)",
     "type": "boolean",
-    "default": true
+    "default": false
+  },
+  {
+    "id": "debugMode",
+    "name": "Debug Mode (log branch resolution details to browser console)",
+    "type": "boolean",
+    "default": false
   }
 ]

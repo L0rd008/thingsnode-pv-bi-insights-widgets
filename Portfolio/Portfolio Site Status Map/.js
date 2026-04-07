@@ -9,6 +9,8 @@ self.onInit = function () {
     self.ctx.$widget = self.ctx.$container;
     self.map = null;
     self.layerGroup = null;
+    self.ctx.__portfolioMapRenderSeq = self.ctx.__portfolioMapRenderSeq || 0;
+    self._renderSeq = self.ctx.__portfolioMapRenderSeq;
 
     // Pending state tracking
     self._pendingRender = null;
@@ -55,11 +57,222 @@ function normalizeProfile(value) {
     return normalizeKey(value).replace(/\s+/g, '');
 }
 
+function normalizeEntityType(value) {
+    return (value || '').toString().trim().toUpperCase();
+}
+
 function getEntityIdValue(entityId) {
     if (!entityId) { return ''; }
     if (typeof entityId === 'string') { return entityId; }
     if (entityId.id) { return entityId.id; }
     return '';
+}
+
+function getDatasourceEntityType(datasource) {
+    if (!datasource) { return ''; }
+    return normalizeEntityType(
+        datasource.entityType ||
+        (datasource.entityId && datasource.entityId.entityType) ||
+        ''
+    );
+}
+
+function getDatasourceProfile(datasource) {
+    if (!datasource) { return ''; }
+    return datasource.entityProfileName || datasource.deviceProfileName || '';
+}
+
+function isDebugMode() {
+    return !!(self.ctx && self.ctx.settings && self.ctx.settings.debugMode);
+}
+
+function isStrictDuckTypingEnabled() {
+    var value = self.ctx && self.ctx.settings
+        ? self.ctx.settings.strictDuckTyping
+        : false;
+    return value === true || value === 'true';
+}
+
+function getRenderId(renderToken) {
+    return renderToken && renderToken.id ? renderToken.id : 'no-render';
+}
+
+function nextRenderToken() {
+    self.ctx.__portfolioMapRenderSeq = (self.ctx.__portfolioMapRenderSeq || 0) + 1;
+    self._renderSeq = self.ctx.__portfolioMapRenderSeq;
+
+    return {
+        id: 'render-' + self._renderSeq + '-' + Date.now().toString(36)
+    };
+}
+
+function shortId(value) {
+    var id = getEntityIdValue(value);
+    return id ? id.substring(0, 8) : '';
+}
+
+function parseStateParamValue(value) {
+    if (typeof value !== 'string') { return value; }
+
+    try {
+        return JSON.parse(value);
+    } catch (e) {
+        return value;
+    }
+}
+
+function buildEntityRef(entityId, entityType) {
+    var id = getEntityIdValue(entityId);
+    if (!id) { return null; }
+
+    return {
+        id: id,
+        entityType: normalizeEntityType(entityType)
+    };
+}
+
+function getStateParams() {
+    try {
+        return self.ctx.stateController &&
+            typeof self.ctx.stateController.getStateParams === 'function'
+            ? (self.ctx.stateController.getStateParams() || {})
+            : {};
+    } catch (e) {
+        return {};
+    }
+}
+
+function getStateEntityRef(paramName, stateParams) {
+    stateParams = stateParams || getStateParams();
+    var raw = parseStateParamValue(stateParams && stateParams[paramName]);
+
+    if (!raw) { return null; }
+
+    if (typeof raw === 'string') {
+        return buildEntityRef(raw, '');
+    }
+
+    if (raw.entityId) {
+        return buildEntityRef(
+            getEntityIdValue(raw.entityId),
+            raw.entityType || raw.type || raw.entityId.entityType
+        );
+    }
+
+    return buildEntityRef(
+        getEntityIdValue(raw.id || raw.entityId),
+        raw.entityType || raw.type
+    );
+}
+
+function getEntityRef(entity, fallbackType) {
+    if (!entity) { return null; }
+
+    if (entity.id && typeof entity.id === 'object') {
+        return buildEntityRef(entity.id.id, entity.id.entityType || entity._entityType || fallbackType);
+    }
+
+    return buildEntityRef(entity.id || entity, entity.entityType || entity._entityType || fallbackType);
+}
+
+function summarizeEntityRef(entityRef) {
+    if (!entityRef || !entityRef.id) { return null; }
+    return {
+        id: shortId(entityRef.id),
+        entityType: normalizeEntityType(entityRef.entityType) || 'UNKNOWN'
+    };
+}
+
+function getRelationEntityRef(side, fallbackType) {
+    if (!side) { return null; }
+    return buildEntityRef(side.id || side, side.entityType || fallbackType);
+}
+
+function getEntityProfile(entity) {
+    if (!entity) { return ''; }
+    return entity.assetProfileName || entity.deviceProfileName || entity.type || '';
+}
+
+function annotateEntityType(entity, entityType) {
+    if (!entity) { return entity; }
+    entity._entityType = normalizeEntityType(entityType) || normalizeEntityType(entity._entityType);
+    return entity;
+}
+
+function summarizeEntity(entity) {
+    if (!entity) { return null; }
+    return {
+        id: shortId(entity.id && entity.id.id || entity.id),
+        entityType: normalizeEntityType(
+            entity._entityType ||
+            (entity.id && entity.id.entityType) ||
+            entity.entityType ||
+            ''
+        ) || 'UNKNOWN',
+        profile: getEntityProfile(entity),
+        name: entity.name || ''
+    };
+}
+
+function summarizeEntityRefs(entityRefs, limit) {
+    limit = limit || 6;
+    return (entityRefs || []).slice(0, limit).map(function (entityRef) {
+        return summarizeEntityRef(entityRef);
+    });
+}
+
+function summarizeEntities(entities, limit) {
+    limit = limit || 6;
+    return (entities || []).slice(0, limit).map(function (entity) {
+        return summarizeEntity(entity);
+    });
+}
+
+function debugLog(renderToken, stage, payload) {
+    if (!isDebugMode() || typeof console === 'undefined' || !console.log) { return; }
+    console.log('[PortfolioMap][' + getRenderId(renderToken) + '] ' + stage, payload || {});
+}
+
+function debugWarn(renderToken, stage, payload) {
+    if (!isDebugMode() || typeof console === 'undefined' || !console.warn) { return; }
+    console.warn('[PortfolioMap][' + getRenderId(renderToken) + '] ' + stage, payload || {});
+}
+
+function isPlantEntity(entity) {
+    return isPlantProfile(getEntityProfile(entity));
+}
+
+function getVisitedKey(entityRef) {
+    if (!entityRef || !entityRef.id) { return ''; }
+    return (entityRef.entityType || 'UNKNOWN') + ':' + entityRef.id;
+}
+
+function uniqueEntityRefs(entityRefs) {
+    var seen = {};
+    var unique = [];
+
+    (entityRefs || []).forEach(function (entityRef) {
+        var key = getVisitedKey(entityRef);
+        if (!key || seen[key]) { return; }
+        seen[key] = true;
+        unique.push(entityRef);
+    });
+
+    return unique;
+}
+
+function uniqueEntities(entities) {
+    var seen = {};
+    var unique = [];
+
+    (entities || []).forEach(function (entity) {
+        var key = getVisitedKey(getEntityRef(entity));
+        if (!key || seen[key]) { return; }
+        seen[key] = true;
+        unique.push(entity);
+    });
+
+    return unique;
 }
 
 function getEntityKey(datasource) {
@@ -96,21 +309,167 @@ function isPlantProfile(profileName) {
 // Uses self.ctx.http (Angular $http exposed by ThingsBoard)
 // ============================================================
 
-function getChildRelations(entityId, token) {
+function getChildRelations(entityId, entityType, token) {
     var url = '/api/relations?fromId=' + entityId +
-              '&fromType=ASSET&relationType=Contains&toEntityType=ASSET';
+              '&fromType=' + encodeURIComponent(normalizeEntityType(entityType) || 'ASSET') +
+              '&relationType=Contains';
     return apiGet(url, token);
 }
 
-function getParentRelations(entityId, token) {
+function getParentRelations(entityId, entityType, token) {
     var url = '/api/relations/info?toId=' + entityId +
-              '&toType=ASSET&relationType=Contains&fromEntityType=ASSET';
+              '&toType=' + encodeURIComponent(normalizeEntityType(entityType) || 'ASSET') +
+              '&relationType=Contains';
     return apiGet(url, token);
 }
 
-function getAsset(entityId, token) {
-    var url = '/api/asset/' + entityId;
+function getEntityUrl(entityType, entityId) {
+    var normalizedType = normalizeEntityType(entityType);
+    if (normalizedType === 'ASSET') {
+        return '/api/asset/' + entityId;
+    }
+    if (normalizedType === 'DEVICE') {
+        return '/api/device/' + entityId;
+    }
+    return '';
+}
+
+function isNotFoundError(error) {
+    return !!(error && (error.status === 404 || error.statusCode === 404));
+}
+
+function isSupportedTraversalEntityType(entityType) {
+    var normalizedType = normalizeEntityType(entityType);
+    return normalizedType === 'ASSET' || normalizedType === 'DEVICE';
+}
+
+function getSelectedEntityCandidateTypes(entityType) {
+    var normalizedType = normalizeEntityType(entityType);
+    var supported = ['ASSET', 'DEVICE'];
+
+    if (supported.indexOf(normalizedType) > -1) {
+        return [normalizedType].concat(supported.filter(function (type) {
+            return type !== normalizedType;
+        }));
+    }
+
+    return supported;
+}
+
+function getEntityByType(entityId, entityType, token) {
+    var url = getEntityUrl(entityType, entityId);
+    if (!url) {
+        return Promise.reject(new Error('Unsupported entity type: ' + entityType));
+    }
     return apiGet(url, token);
+}
+
+function resolveSelectedEntity(entityId, entityType, token, renderToken, context) {
+    if (!entityId) {
+        debugWarn(renderToken, 'resolve_selected_entity_failed', {
+            context: context || 'selected_entity',
+            reason: 'missing_entity_id'
+        });
+        return Promise.reject(new Error('Missing entity ID'));
+    }
+
+    var candidates = getSelectedEntityCandidateTypes(entityType);
+    var attemptedTypes = [];
+
+    debugLog(renderToken, 'resolve_selected_entity_start', {
+        context: context || 'selected_entity',
+        entityId: shortId(entityId),
+        requestedType: normalizeEntityType(entityType) || 'UNKNOWN',
+        candidates: candidates
+    });
+
+    function tryAt(index) {
+        if (index >= candidates.length) {
+            debugWarn(renderToken, 'resolve_selected_entity_failed', {
+                context: context || 'selected_entity',
+                entityId: shortId(entityId),
+                attemptedTypes: attemptedTypes,
+                reason: 'entity_not_found'
+            });
+            return Promise.reject(new Error('Entity not found for supported ThingsBoard types'));
+        }
+
+        var currentType = candidates[index];
+        attemptedTypes.push(currentType);
+        return getEntityByType(entityId, currentType, token).then(function (entity) {
+            var annotated = annotateEntityType(entity, currentType);
+            debugLog(renderToken, 'resolve_selected_entity_success', {
+                context: context || 'selected_entity',
+                entityId: shortId(entityId),
+                attemptedTypes: attemptedTypes,
+                entity: summarizeEntity(annotated)
+            });
+            return annotated;
+        }).catch(function (error) {
+            if (isNotFoundError(error)) {
+                debugLog(renderToken, 'resolve_selected_entity_retry', {
+                    context: context || 'selected_entity',
+                    entityId: shortId(entityId),
+                    attemptedType: currentType
+                });
+                return tryAt(index + 1);
+            }
+            debugWarn(renderToken, 'resolve_selected_entity_failed', {
+                context: context || 'selected_entity',
+                entityId: shortId(entityId),
+                attemptedTypes: attemptedTypes,
+                reason: 'request_failed',
+                status: error && (error.status || error.statusCode || '')
+            });
+            return Promise.reject(error);
+        });
+    }
+
+    return tryAt(0);
+}
+
+function fetchTraversalEntity(entityRef, token, renderToken, context) {
+    if (!entityRef || !entityRef.id) {
+        return Promise.resolve(null);
+    }
+
+    var entityType = normalizeEntityType(entityRef.entityType);
+    if (!isSupportedTraversalEntityType(entityType)) {
+        debugLog(renderToken, 'fetch_traversal_entity_skipped', {
+            context: context || 'traversal',
+            entity: summarizeEntityRef(entityRef),
+            reason: 'unsupported_entity_type'
+        });
+        return Promise.resolve(null);
+    }
+
+    return getEntityByType(entityRef.id, entityType, token).then(function (entity) {
+        return annotateEntityType(entity, entityType);
+    }).catch(function (error) {
+        if (isNotFoundError(error)) {
+            debugWarn(renderToken, 'fetch_traversal_entity_not_found', {
+                context: context || 'traversal',
+                entity: summarizeEntityRef(entityRef)
+            });
+            return null;
+        }
+        debugWarn(renderToken, 'fetch_traversal_entity_failed', {
+            context: context || 'traversal',
+            entity: summarizeEntityRef(entityRef),
+            status: error && (error.status || error.statusCode || '')
+        });
+        return Promise.reject(error);
+    });
+}
+
+function getSupportedRelationEntityRefs(relations, side) {
+    if (!relations || relations.length === 0) { return []; }
+
+    return uniqueEntityRefs(relations.map(function (relation) {
+        return getRelationEntityRef(relation && relation[side]);
+    }).filter(function (entityRef) {
+        return entityRef && isSupportedTraversalEntityType(entityRef.entityType);
+    }));
 }
 
 function apiGet(url, token) {
@@ -118,39 +477,221 @@ function apiGet(url, token) {
     if (token) {
         headers['X-Authorization'] = 'Bearer ' + token;
     }
-    return self.ctx.http.get(url, { headers: headers }).then(function (resp) {
-        return resp.data;
+
+    return new Promise(function (resolve, reject) {
+        try {
+            var request = self.ctx.http.get(url, { headers: headers });
+
+            if (request && typeof request.then === 'function') {
+                request.then(function (resp) {
+                    resolve(resp && resp.data !== undefined ? resp.data : resp);
+                }, reject);
+                return;
+            }
+
+            if (request && typeof request.subscribe === 'function') {
+                request.subscribe(function (resp) {
+                    resolve(resp && resp.data !== undefined ? resp.data : resp);
+                }, reject);
+                return;
+            }
+
+            reject(new Error('Unsupported ThingsBoard HTTP client response type'));
+        } catch (err) {
+            reject(err);
+        }
     });
 }
 
-// ============================================================
-// RECURSIVE DESCENDANT FETCH
-// ============================================================
-function fetchPlantDescendants(rootEntityId, token, maxDepth) {
-    maxDepth = maxDepth || 8;
+function getSupportedParentRefs(entityRef, authToken, renderToken, context) {
+    if (!entityRef || !entityRef.id) {
+        return Promise.resolve([]);
+    }
+
+    return getParentRelations(entityRef.id, entityRef.entityType, authToken).then(function (relations) {
+        var supportedParents = getSupportedRelationEntityRefs(relations, 'from');
+        debugLog(renderToken, 'parent_candidates', {
+            context: context || 'parent_lookup',
+            entity: summarizeEntityRef(entityRef),
+            relationCount: (relations || []).length,
+            supportedParentCount: supportedParents.length,
+            parents: summarizeEntityRefs(supportedParents),
+            ambiguityCount: supportedParents.length > 1 ? supportedParents.length : 0
+        });
+        return supportedParents;
+    }).catch(function (error) {
+        debugWarn(renderToken, 'parent_candidates_failed', {
+            context: context || 'parent_lookup',
+            entity: summarizeEntityRef(entityRef),
+            status: error && (error.status || error.statusCode || '')
+        });
+        return [];
+    });
+}
+
+function findNearestAncestorMatches(startRef, authToken, renderToken, maxUp, matcher, label) {
+    maxUp = maxUp || 5;
+    var visited = {};
+
+    function step(frontier, depth) {
+        frontier = uniqueEntityRefs(frontier).filter(function (entityRef) {
+            var key = getVisitedKey(entityRef);
+            return key && !visited[key];
+        });
+
+        if (depth > maxUp || !frontier.length) {
+            debugWarn(renderToken, 'ancestor_search_no_match', {
+                label: label,
+                start: summarizeEntityRef(startRef),
+                maxUp: maxUp
+            });
+            return Promise.resolve([]);
+        }
+
+        frontier.forEach(function (entityRef) {
+            visited[getVisitedKey(entityRef)] = true;
+        });
+
+        debugLog(renderToken, 'ancestor_search_level', {
+            label: label,
+            depth: depth,
+            frontier: summarizeEntityRefs(frontier)
+        });
+
+        return Promise.all(frontier.map(function (entityRef) {
+            return fetchTraversalEntity(entityRef, authToken, renderToken, label + '_depth_' + depth).then(function (entity) {
+                return { ref: entityRef, entity: entity };
+            }).catch(function () {
+                return { ref: entityRef, entity: null };
+            });
+        })).then(function (results) {
+            var matches = [];
+            var parentPromises = [];
+
+            results.forEach(function (result) {
+                if (!result.entity) { return; }
+
+                if (matcher(result.entity)) {
+                    matches.push(result.entity);
+                    return;
+                }
+
+                parentPromises.push(getSupportedParentRefs(result.ref, authToken, renderToken, label + '_depth_' + depth));
+            });
+
+            matches = uniqueEntities(matches);
+
+            if (matches.length > 0) {
+                debugLog(renderToken, 'ancestor_search_match', {
+                    label: label,
+                    depth: depth,
+                    matchCount: matches.length,
+                    matches: summarizeEntities(matches),
+                    ambiguityCount: matches.length > 1 ? matches.length : 0
+                });
+                return matches;
+            }
+
+            return Promise.all(parentPromises).then(function (parentLists) {
+                var nextFrontier = [];
+                parentLists.forEach(function (parentRefs) {
+                    nextFrontier = nextFrontier.concat(parentRefs || []);
+                });
+                return step(nextFrontier, depth + 1);
+            });
+        });
+    }
+
+    return step([startRef], 0);
+}
+
+function findNearestPlantAncestors(entityRef, authToken, renderToken, maxUp) {
+    return findNearestAncestorMatches(entityRef, authToken, renderToken, maxUp, function (entity) {
+        return isPlantEntity(entity);
+    }, 'plant_ancestor_search');
+}
+
+function findNearestNonPlantAncestors(entityRef, authToken, renderToken, maxUp) {
+    return findNearestAncestorMatches(entityRef, authToken, renderToken, maxUp, function (entity) {
+        return !isPlantEntity(entity);
+    }, 'non_plant_ancestor_search');
+}
+
+function renderSelectedPlantOnly(plantEntity, authToken, renderToken, reason, details) {
+    debugWarn(renderToken, 'render_selected_plant_only', {
+        reason: reason,
+        plant: summarizeEntity(plantEntity),
+        details: details || {}
+    });
+    return renderPlantAssets([plantEntity], authToken, renderToken, {
+        branchRootKind: 'plant_leaf',
+        branchRoot: plantEntity
+    });
+}
+
+function fetchPlantTree(rootEntityRef, token, renderToken, options) {
+    options = options || {};
+
+    var maxDepth = options.maxDepth || 8;
+    var includeRootPlant = !!options.includeRootPlant;
+    var descendIntoPlantChildren = !!options.descendIntoPlantChildren;
     var plants = [];
     var visited = {};
 
-    function walk(entityId, depth) {
-        if (depth > maxDepth || visited[entityId]) {
+    debugLog(renderToken, 'plant_tree_start', {
+        root: summarizeEntityRef(rootEntityRef),
+        includeRootPlant: includeRootPlant,
+        descendIntoPlantChildren: descendIntoPlantChildren,
+        maxDepth: maxDepth
+    });
+
+    function walk(entityRef, depth) {
+        var visitKey = getVisitedKey(entityRef);
+        if (depth > maxDepth || !visitKey || visited[visitKey]) {
             return Promise.resolve();
         }
-        visited[entityId] = true;
+        visited[visitKey] = true;
 
-        return getChildRelations(entityId, token).then(function (relations) {
+        return getChildRelations(entityRef.id, entityRef.entityType, token).then(function (relations) {
             if (!relations || relations.length === 0) { return; }
 
-            var promises = relations.map(function (rel) {
-                var childId = rel.to && rel.to.id;
-                if (!childId || visited[childId]) { return Promise.resolve(); }
+            var childRefs = getSupportedRelationEntityRefs(relations, 'to');
 
-                return getAsset(childId, token).then(function (asset) {
-                    if (!asset) { return; }
-                    if (isPlantProfile(asset.assetProfileName || asset.type)) {
-                        plants.push(asset);
-                        return Promise.resolve();
+            debugLog(renderToken, 'plant_tree_walk', {
+                depth: depth,
+                root: summarizeEntityRef(entityRef),
+                relationCount: relations.length,
+                supportedChildCount: childRefs.length,
+                skippedRelationCount: relations.length - childRefs.length
+            });
+
+            var promises = childRefs.map(function (childRef) {
+                var childKey = getVisitedKey(childRef);
+                if (visited[childKey]) {
+                    return Promise.resolve();
+                }
+
+                return fetchTraversalEntity(childRef, token, renderToken, 'plant_tree_depth_' + depth).then(function (entity) {
+                    if (!entity) { return; }
+
+                    if (isPlantEntity(entity)) {
+                        plants.push(entity);
+                        debugLog(renderToken, 'plant_tree_plant_found', {
+                            depth: depth + 1,
+                            plant: summarizeEntity(entity)
+                        });
+                        if (!descendIntoPlantChildren) {
+                            return Promise.resolve();
+                        }
                     }
-                    return walk(childId, depth + 1);
+
+                    return walk(getEntityRef(entity, childRef.entityType), depth + 1);
+                }).catch(function () {
+                    debugWarn(renderToken, 'plant_tree_child_failed', {
+                        depth: depth + 1,
+                        child: summarizeEntityRef(childRef)
+                    });
+                    return Promise.resolve();
                 });
             });
 
@@ -158,59 +699,201 @@ function fetchPlantDescendants(rootEntityId, token, maxDepth) {
         });
     }
 
-    return walk(rootEntityId, 0).then(function () { return plants; });
+    function complete() {
+        plants = uniqueEntities(plants);
+        debugLog(renderToken, 'plant_tree_complete', {
+            root: summarizeEntityRef(rootEntityRef),
+            includeRootPlant: includeRootPlant,
+            descendIntoPlantChildren: descendIntoPlantChildren,
+            plantCount: plants.length,
+            plants: summarizeEntities(plants)
+        });
+        return plants;
+    }
+
+    if (!rootEntityRef || !rootEntityRef.id) {
+        return Promise.resolve([]);
+    }
+
+    if (!includeRootPlant) {
+        return walk(rootEntityRef, 0).then(complete);
+    }
+
+    return fetchTraversalEntity(rootEntityRef, token, renderToken, 'plant_tree_root').then(function (rootEntity) {
+        if (rootEntity && isPlantEntity(rootEntity)) {
+            plants.push(rootEntity);
+            debugLog(renderToken, 'plant_tree_root_included', {
+                root: summarizeEntity(rootEntity)
+            });
+        }
+        return walk(rootEntityRef, 0);
+    }).then(complete);
+}
+
+function tryRenderPlantSubtree(plantEntity, authToken, renderToken, context) {
+    var plantRef = getEntityRef(plantEntity);
+
+    return fetchPlantTree(plantRef, authToken, renderToken, {
+        includeRootPlant: true,
+        descendIntoPlantChildren: true
+    }).then(function (plants) {
+        if (renderToken !== self._pendingRender) { return false; }
+
+        if (!plants || plants.length <= 1) {
+            debugLog(renderToken, 'plant_subtree_not_used', {
+                context: context,
+                plant: summarizeEntity(plantEntity),
+                plantCount: (plants || []).length
+            });
+            return false;
+        }
+
+        debugLog(renderToken, 'plant_subtree_used', {
+            context: context,
+            branchRootKind: 'plant_subtree',
+            branchRoot: summarizeEntity(plantEntity),
+            plantCount: plants.length,
+            plants: summarizeEntities(plants)
+        });
+        renderPlantAssets(plants, authToken, renderToken, {
+            branchRootKind: 'plant_subtree',
+            branchRoot: plantEntity
+        });
+        return true;
+    });
+}
+
+function resolveBranchFromPlant(plantEntity, authToken, renderToken, context) {
+    var plantRef = getEntityRef(plantEntity);
+
+    debugLog(renderToken, 'resolve_branch_from_plant_start', {
+        context: context,
+        plant: summarizeEntity(plantEntity)
+    });
+
+    return tryRenderPlantSubtree(plantEntity, authToken, renderToken, context).then(function (usedPlantSubtree) {
+        if (renderToken !== self._pendingRender || usedPlantSubtree) { return; }
+
+        return findNearestNonPlantAncestors(plantRef, authToken, renderToken).then(function (branchAncestors) {
+            if (renderToken !== self._pendingRender) { return; }
+
+            if (!branchAncestors || branchAncestors.length === 0) {
+                return renderSelectedPlantOnly(plantEntity, authToken, renderToken, 'no_supported_parents', {
+                    context: context
+                });
+            }
+
+            if (branchAncestors.length > 1) {
+                return renderSelectedPlantOnly(plantEntity, authToken, renderToken, 'ambiguous_branch', {
+                    context: context,
+                    branchCandidates: summarizeEntities(branchAncestors)
+                });
+            }
+
+            debugLog(renderToken, 'resolve_branch_from_plant_success', {
+                context: context,
+                plant: summarizeEntity(plantEntity),
+                branchRoot: summarizeEntity(branchAncestors[0])
+            });
+
+            return fetchAndRender(getEntityRef(branchAncestors[0]), authToken, renderToken, {
+                branchRootKind: 'container',
+                branchRoot: branchAncestors[0]
+            });
+        });
+    });
+}
+
+function tryRenderBranchRoot(branchRootRef, authToken, renderToken) {
+    if (!branchRootRef || !branchRootRef.id) {
+        return Promise.resolve(false);
+    }
+
+    debugLog(renderToken, 'branch_root_attempt', {
+        branchRoot: summarizeEntityRef(branchRootRef)
+    });
+
+    return resolveSelectedEntity(branchRootRef.id, branchRootRef.entityType, authToken, renderToken, 'branch_root').then(function (branchRootEntity) {
+        if (renderToken !== self._pendingRender) { return false; }
+
+        if (isPlantEntity(branchRootEntity)) {
+            return fetchPlantTree(getEntityRef(branchRootEntity, branchRootRef.entityType), authToken, renderToken, {
+                includeRootPlant: true,
+                descendIntoPlantChildren: true
+            }).then(function (plants) {
+                var branchRootKind = plants && plants.length > 1 ? 'plant_subtree' : 'plant_leaf';
+
+                if (renderToken !== self._pendingRender) { return false; }
+                if (!plants || plants.length === 0) {
+                    debugWarn(renderToken, 'branch_root_invalid', {
+                        reason: 'branch_root_invalid',
+                        branchRoot: summarizeEntity(branchRootEntity),
+                        detail: 'plant_branch_root_has_no_renderable_plants'
+                    });
+                    return false;
+                }
+
+                debugLog(renderToken, 'branch_root_used', {
+                    branchRoot: summarizeEntity(branchRootEntity),
+                    branchRootKind: branchRootKind,
+                    branchRootUsed: true,
+                    descendantPlantCount: plants.length
+                });
+                renderPlantAssets(plants, authToken, renderToken, {
+                    branchRootKind: branchRootKind,
+                    branchRoot: branchRootEntity
+                });
+                return true;
+            });
+        }
+
+        return fetchPlantTree(getEntityRef(branchRootEntity, branchRootRef.entityType), authToken, renderToken, {
+            includeRootPlant: false,
+            descendIntoPlantChildren: true
+        }).then(function (plants) {
+            if (renderToken !== self._pendingRender) { return false; }
+            debugLog(renderToken, 'branch_root_descendants', {
+                branchRoot: summarizeEntity(branchRootEntity),
+                descendantPlantCount: (plants || []).length
+            });
+            if (plants && plants.length > 0) {
+                debugLog(renderToken, 'branch_root_used', {
+                    branchRoot: summarizeEntity(branchRootEntity),
+                    branchRootKind: 'container',
+                    branchRootUsed: true,
+                    descendantPlantCount: plants.length
+                });
+                renderPlantAssets(plants, authToken, renderToken, {
+                    branchRootKind: 'container',
+                    branchRoot: branchRootEntity
+                });
+                return true;
+            }
+            debugWarn(renderToken, 'branch_root_invalid', {
+                reason: 'branch_root_invalid',
+                branchRoot: summarizeEntity(branchRootEntity),
+                detail: 'branch_root_has_no_plant_descendants'
+            });
+            return false;
+        });
+    }).catch(function () {
+        debugWarn(renderToken, 'branch_root_invalid', {
+            reason: 'branch_root_invalid',
+            branchRoot: summarizeEntityRef(branchRootRef)
+        });
+        return false;
+    });
 }
 
 // ============================================================
-// WALK UP HELPERS
+// RECURSIVE DESCENDANT FETCH
 // ============================================================
-function findAncestorAbovePlants(entityId, token, maxUp) {
-    maxUp = maxUp || 5;
-
-    function step(currentId, stepsLeft) {
-        if (stepsLeft <= 0) { return Promise.resolve(null); }
-
-        return getAsset(currentId, token).then(function (asset) {
-            if (!asset) { return null; }
-            var profile = asset.assetProfileName || asset.type || '';
-            if (!isPlantProfile(profile)) {
-                return asset;
-            }
-            return getParentRelations(currentId, token).then(function (rels) {
-                if (!rels || rels.length === 0) { return null; }
-                var parentId = rels[0].from && rels[0].from.id;
-                if (!parentId) { return null; }
-                return step(parentId, stepsLeft - 1);
-            });
-        });
-    }
-
-    return step(entityId, maxUp);
-}
-
-function findPlantAncestor(entityId, token, maxUp) {
-    maxUp = maxUp || 5;
-
-    function step(currentId, stepsLeft) {
-        if (stepsLeft <= 0) { return Promise.resolve(null); }
-
-        return getAsset(currentId, token).then(function (asset) {
-            if (!asset) { return null; }
-            var profile = asset.assetProfileName || asset.type || '';
-            if (isPlantProfile(profile)) {
-                return asset;
-            }
-
-            return getParentRelations(currentId, token).then(function (rels) {
-                if (!rels || rels.length === 0) { return null; }
-                var parentId = rels[0].from && rels[0].from.id;
-                if (!parentId) { return null; }
-                return step(parentId, stepsLeft - 1);
-            });
-        });
-    }
-
-    return step(entityId, maxUp);
+function fetchPlantDescendants(rootEntityRef, token, renderToken, maxDepth) {
+    return fetchPlantTree(rootEntityRef, token, renderToken, {
+        maxDepth: maxDepth || 8,
+        includeRootPlant: false,
+        descendIntoPlantChildren: false
+    });
 }
 
 // ============================================================
@@ -221,8 +904,19 @@ var TELEMETRY_KEYS = ['latitude', 'lat', 'longitude', 'lon',
                       'plant_name', 'name',
                       'status', 'rar_lkr', 'cf_status'];
 
-function getServerAttributes(entityId, token) {
-    var url = '/api/plugins/telemetry/ASSET/' + entityId +
+function getTelemetryEntityType(entity) {
+    var entityType = normalizeEntityType(
+        (entity && entity._entityType) ||
+        (entity && entity.id && entity.id.entityType) ||
+        (entity && entity.entityType) ||
+        ''
+    );
+
+    return entityType || 'ASSET';
+}
+
+function getServerAttributes(entityId, entityType, token) {
+    var url = '/api/plugins/telemetry/' + (normalizeEntityType(entityType) || 'ASSET') + '/' + entityId +
               '/values/attributes/SERVER_SCOPE?keys=' +
               encodeURIComponent(TELEMETRY_KEYS.join(','));
     return apiGet(url, token);
@@ -248,13 +942,14 @@ function normalizeAttributeMap(attributeData) {
 function fetchTelemetryForAssets(assets, token) {
     var promises = assets.map(function (asset) {
         var id = asset.id && asset.id.id || asset.id;
-        var telemetryUrl = '/api/plugins/telemetry/ASSET/' + id +
+        var entityType = getTelemetryEntityType(asset);
+        var telemetryUrl = '/api/plugins/telemetry/' + entityType + '/' + id +
                            '/values/timeseries?keys=' + encodeURIComponent(TELEMETRY_KEYS.join(',')) +
                            '&limit=1';
 
         return Promise.all([
             apiGet(telemetryUrl, token).catch(function () { return {}; }),
-            getServerAttributes(id, token).catch(function () { return {}; })
+            getServerAttributes(id, entityType, token).catch(function () { return {}; })
         ]).then(function (result) {
             return {
                 asset: asset,
@@ -379,7 +1074,11 @@ self.onDataUpdated = function () {
     if (!self.map || !self.layerGroup) { return; }
 
     var selectedEntityId = null;
+    var selectedEntityType = null;
     var selectedProfile = null;
+    var stateParams = getStateParams();
+    var rawSelectedBranchRoot = stateParams && stateParams.SelectedBranchRoot;
+    var selectedBranchRootRef = getStateEntityRef('SelectedBranchRoot', stateParams);
 
     if (self.ctx.data && self.ctx.data.length > 0) {
         self.ctx.data.forEach(function (dsData) {
@@ -388,7 +1087,8 @@ self.onDataUpdated = function () {
             var eId = getEntityIdValue(ds.entityId);
             if (eId && !selectedEntityId) {
                 selectedEntityId = eId;
-                selectedProfile = normalizeProfile(ds.entityProfileName || '');
+                selectedEntityType = getDatasourceEntityType(ds);
+                selectedProfile = normalizeProfile(getDatasourceProfile(ds));
             }
         });
     }
@@ -398,112 +1098,264 @@ self.onDataUpdated = function () {
         return;
     }
 
-    var token = {};
-    self._pendingRender = token;
+    var renderToken = nextRenderToken();
+    self._pendingRender = renderToken;
 
-    resolveRenderRoot(selectedEntityId, selectedProfile, token);
+    debugLog(renderToken, 'selection', {
+        selectedEntity: summarizeEntityRef(buildEntityRef(selectedEntityId, selectedEntityType)),
+        selectedProfile: selectedProfile || '',
+        rawSelectedBranchRoot: rawSelectedBranchRoot,
+        parsedSelectedBranchRoot: summarizeEntityRef(selectedBranchRootRef)
+    });
+
+    if (!selectedBranchRootRef) {
+        debugWarn(renderToken, 'branch_root_missing', {
+            reason: 'branch_root_missing'
+        });
+    }
+
+    resolveRenderRoot(
+        buildEntityRef(selectedEntityId, selectedEntityType),
+        selectedProfile,
+        selectedBranchRootRef,
+        renderToken
+    );
 };
 
 // ============================================================
 // RESOLVE ROOT AND RENDER
 // ============================================================
-function resolveRenderRoot(selectedId, selectedProfile, token) {
+function resolveRenderRoot(selectedEntityRef, selectedProfile, selectedBranchRootRef, renderToken) {
     var authToken = getAuthToken();
 
     setLoadingState(true);
 
-    getAsset(selectedId, authToken).then(function (asset) {
-        if (token !== self._pendingRender) { return; }
+    resolveSelectedEntity(selectedEntityRef.id, selectedEntityRef.entityType, authToken, renderToken, 'selected_entity').then(function (asset) {
+        if (renderToken !== self._pendingRender) { return; }
 
-        var profile = normalizeProfile(
-            (asset && (asset.assetProfileName || asset.type)) || selectedProfile || ''
-        );
-
-        if (isPlantProfile(profile)) {
-            return findAncestorAbovePlants(selectedId, authToken).then(function (ancestor) {
-                if (token !== self._pendingRender) { return; }
-                if (!ancestor) {
-                    renderPlantAssets([asset], authToken, token);
-                } else {
-                    var rootId = ancestor.id && ancestor.id.id || ancestor.id;
-                    fetchAndRender(rootId, authToken, token);
-                }
+        if (selectedBranchRootRef && selectedBranchRootRef.id) {
+            return tryRenderBranchRoot(selectedBranchRootRef, authToken, renderToken).then(function (usedBranchRoot) {
+                if (renderToken !== self._pendingRender || usedBranchRoot) { return; }
+                return continueResolveRenderRoot(asset, selectedEntityRef, selectedProfile, authToken, renderToken);
             });
         }
 
-        return fetchPlantDescendants(selectedId, authToken).then(function (plants) {
-            if (token !== self._pendingRender) { return; }
+        return continueResolveRenderRoot(asset, selectedEntityRef, selectedProfile, authToken, renderToken);
+    }).catch(function () {
+        if (renderToken !== self._pendingRender) { return; }
+        debugWarn(renderToken, 'resolve_render_root_failed', {
+            selectedEntity: summarizeEntityRef(selectedEntityRef),
+            reason: 'selected_entity_resolution_failed'
+        });
+        setLoadingState(false);
+        renderEmptyState(renderToken, 'selected_entity_resolution_failed');
+    });
+}
 
-            if (plants && plants.length > 0) {
-                renderPlantAssets(plants, authToken, token);
+function continueResolveRenderRoot(asset, selectedEntityRef, selectedProfile, authToken, renderToken) {
+    if (renderToken !== self._pendingRender) { return Promise.resolve(); }
+
+    var profile = normalizeProfile(
+        getEntityProfile(asset) || selectedProfile || ''
+    );
+    var selectedResolvedRef = getEntityRef(asset, selectedEntityRef.entityType);
+
+    debugLog(renderToken, 'continue_resolve_render_root', {
+        selectedEntity: summarizeEntity(asset),
+        selectedProfile: profile || '',
+        selectedKind: isPlantProfile(profile) ? 'plant' : 'non_plant'
+    });
+
+    if (isPlantProfile(profile)) {
+        return resolveBranchFromPlant(asset, authToken, renderToken, 'selected_plant');
+    }
+
+    return fetchPlantTree(selectedResolvedRef, authToken, renderToken, {
+        includeRootPlant: false,
+        descendIntoPlantChildren: true
+    }).then(function (plants) {
+        if (renderToken !== self._pendingRender) { return; }
+
+        if (plants && plants.length > 0) {
+            debugLog(renderToken, 'selected_container_descendants', {
+                selectedEntity: summarizeEntity(asset),
+                branchRootKind: 'container',
+                descendantPlantCount: plants.length,
+                plantIds: plants.map(function (plant) {
+                    return shortId(plant && plant.id && plant.id.id || plant && plant.id);
+                })
+            });
+            renderPlantAssets(plants, authToken, renderToken, {
+                branchRootKind: 'container',
+                branchRoot: asset
+            });
+            return;
+        }
+
+        return findNearestPlantAncestors(selectedResolvedRef, authToken, renderToken).then(function (plantAncestors) {
+            if (renderToken !== self._pendingRender) { return; }
+
+            if (!plantAncestors || plantAncestors.length === 0) {
+                debugWarn(renderToken, 'container_descendants_empty', {
+                    reason: 'container_descendants_empty',
+                    selectedEntity: summarizeEntity(asset)
+                });
+                setLoadingState(false);
+                renderEmptyState(renderToken, 'container_descendants_empty', {
+                    selectedEntity: summarizeEntity(asset)
+                });
                 return;
             }
 
-            return findPlantAncestor(selectedId, authToken).then(function (plantAncestor) {
-                if (token !== self._pendingRender) { return; }
-                if (!plantAncestor) {
-                    setLoadingState(false);
-                    renderEmptyState();
-                    return;
-                }
-
-                var plantAncestorId = plantAncestor.id && plantAncestor.id.id || plantAncestor.id;
-                return findAncestorAbovePlants(plantAncestorId, authToken).then(function (ancestor) {
-                    if (token !== self._pendingRender) { return; }
-                    if (!ancestor) {
-                        renderPlantAssets([plantAncestor], authToken, token);
-                        return;
-                    }
-
-                    var rootId = ancestor.id && ancestor.id.id || ancestor.id;
-                    fetchAndRender(rootId, authToken, token);
+            if (plantAncestors.length > 1) {
+                debugWarn(renderToken, 'ambiguous_branch', {
+                    reason: 'ambiguous_branch',
+                    selectedEntity: summarizeEntity(asset),
+                    plantAncestors: summarizeEntities(plantAncestors)
                 });
+                setLoadingState(false);
+                renderEmptyState(renderToken, 'ambiguous_branch', {
+                    selectedEntity: summarizeEntity(asset),
+                    plantAncestors: summarizeEntities(plantAncestors)
+                });
+                return;
+            }
+
+            return resolveBranchFromPlant(plantAncestors[0], authToken, renderToken, 'descendant_below_plant');
+        }).catch(function () {
+            if (renderToken !== self._pendingRender) { return; }
+            debugWarn(renderToken, 'continue_resolve_render_root_failed', {
+                selectedEntity: summarizeEntity(asset)
+            });
+            setLoadingState(false);
+            renderEmptyState(renderToken, 'continue_resolve_render_root_failed', {
+                selectedEntity: summarizeEntity(asset)
             });
         });
-    }).catch(function () {
-        if (token !== self._pendingRender) { return; }
-        setLoadingState(false);
-        renderEmptyState();
     });
 }
 
-function fetchAndRender(rootId, authToken, token) {
-    fetchPlantDescendants(rootId, authToken).then(function (plants) {
-        if (token !== self._pendingRender) { return; }
-        renderPlantAssets(plants, authToken, token);
+function fetchAndRender(rootEntityRef, authToken, renderToken, renderMeta) {
+    renderMeta = renderMeta || {};
+
+    debugLog(renderToken, 'fetch_and_render_start', {
+        rootEntity: summarizeEntityRef(rootEntityRef),
+        branchRootKind: renderMeta.branchRootKind || '',
+        branchRoot: summarizeEntity(renderMeta.branchRoot)
+    });
+
+    fetchPlantTree(rootEntityRef, authToken, renderToken, {
+        includeRootPlant: false,
+        descendIntoPlantChildren: true
+    }).then(function (plants) {
+        if (renderToken !== self._pendingRender) { return; }
+        renderPlantAssets(plants, authToken, renderToken, renderMeta);
     }).catch(function () {
-        if (token !== self._pendingRender) { return; }
+        if (renderToken !== self._pendingRender) { return; }
+        debugWarn(renderToken, 'fetch_and_render_failed', {
+            rootEntity: summarizeEntityRef(rootEntityRef),
+            branchRootKind: renderMeta.branchRootKind || '',
+            branchRoot: summarizeEntity(renderMeta.branchRoot)
+        });
         setLoadingState(false);
-        renderEmptyState();
+        renderEmptyState(renderToken, 'fetch_and_render_failed', {
+            rootEntity: summarizeEntityRef(rootEntityRef),
+            branchRootKind: renderMeta.branchRootKind || '',
+            branchRoot: summarizeEntity(renderMeta.branchRoot)
+        });
     });
 }
 
-function renderPlantAssets(assets, authToken, token) {
+function renderPlantAssets(assets, authToken, renderToken, renderMeta) {
+    renderMeta = renderMeta || {};
+
     if (!assets || assets.length === 0) {
         setLoadingState(false);
-        renderEmptyState();
+        renderEmptyState(renderToken, 'no_assets_to_render', {
+            branchRootKind: renderMeta.branchRootKind || '',
+            branchRoot: summarizeEntity(renderMeta.branchRoot)
+        });
         return;
     }
 
+    assets = uniqueEntities(assets);
+
+    debugLog(renderToken, 'telemetry_fetch_start', {
+        branchRootKind: renderMeta.branchRootKind || '',
+        branchRoot: summarizeEntity(renderMeta.branchRoot),
+        telemetryFetchCount: assets.length,
+        assets: summarizeEntities(assets)
+    });
+
     fetchTelemetryForAssets(assets, authToken).then(function (results) {
-        if (token !== self._pendingRender) { return; }
+        if (renderToken !== self._pendingRender) { return; }
         setLoadingState(false);
 
-        var useDuckTyping = self.ctx.settings.strictDuckTyping !== false;
+        var useDuckTyping = isStrictDuckTypingEnabled();
         var sites = [];
+        var droppedMissingLocation = 0;
+        var droppedMissingCapacity = 0;
+        var renderedWithoutCapacity = 0;
 
         results.forEach(function (result) {
             var site = buildSiteFromTelemetry(result.asset, result.telemetry, result.attributes);
-            if (site.lat === null || site.lon === null) { return; }
-            if (useDuckTyping && site.capacity === null) { return; }
+            if (site.lat === null || site.lon === null) {
+                droppedMissingLocation++;
+                return;
+            }
+            if (useDuckTyping && site.capacity === null) {
+                droppedMissingCapacity++;
+                return;
+            }
+            if (site.capacity === null) {
+                renderedWithoutCapacity++;
+            }
             sites.push(site);
         });
 
+        debugLog(renderToken, 'render_summary', {
+            branchRootKind: renderMeta.branchRootKind || '',
+            branchRoot: summarizeEntity(renderMeta.branchRoot),
+            strictDuckTyping: useDuckTyping,
+            telemetryFetchCount: results.length,
+            renderedCount: sites.length,
+            renderedWithoutCapacity: renderedWithoutCapacity,
+            droppedMissingLocation: droppedMissingLocation,
+            droppedMissingCapacity: droppedMissingCapacity,
+            plantIds: sites.map(function (site) { return shortId(site.entityId); })
+        });
+
+        if (sites.length === 0) {
+            debugWarn(renderToken, 'telemetry_filtered_all', {
+                reason: 'telemetry_filtered_all',
+                branchRootKind: renderMeta.branchRootKind || '',
+                branchRoot: summarizeEntity(renderMeta.branchRoot),
+                droppedMissingLocation: droppedMissingLocation,
+                droppedMissingCapacity: droppedMissingCapacity
+            });
+            renderEmptyState(renderToken, 'telemetry_filtered_all', {
+                branchRootKind: renderMeta.branchRootKind || '',
+                branchRoot: summarizeEntity(renderMeta.branchRoot),
+                droppedMissingLocation: droppedMissingLocation,
+                droppedMissingCapacity: droppedMissingCapacity
+            });
+            return;
+        }
+
         renderMarkers(sites);
     }).catch(function () {
-        if (token !== self._pendingRender) { return; }
+        if (renderToken !== self._pendingRender) { return; }
+        debugWarn(renderToken, 'telemetry_fetch_failed', {
+            branchRootKind: renderMeta.branchRootKind || '',
+            branchRoot: summarizeEntity(renderMeta.branchRoot),
+            assetCount: assets.length
+        });
         setLoadingState(false);
-        renderEmptyState();
+        renderEmptyState(renderToken, 'telemetry_fetch_failed', {
+            branchRootKind: renderMeta.branchRootKind || '',
+            branchRoot: summarizeEntity(renderMeta.branchRoot),
+            assetCount: assets.length
+        });
     });
 }
 
@@ -533,13 +1385,13 @@ function renderMarkers(sites) {
     sites.forEach(function (site) {
         var lat = site.lat;
         var lon = site.lon;
-
-        var capVal = site.capacity || 0;
-        var capMW = capVal;
+        var hasCapacity = site.capacity !== null && site.capacity !== undefined;
+        var capVal = hasCapacity ? site.capacity : null;
+        var capMW = hasCapacity ? capVal : 0;
         var unitUpperCase = displayUnit.toUpperCase();
-        if (unitUpperCase === 'W') {
+        if (hasCapacity && unitUpperCase === 'W') {
             capMW = capVal / 1000000;
-        } else if (unitUpperCase === 'KW') {
+        } else if (hasCapacity && unitUpperCase === 'KW') {
             capMW = capVal / 1000;
         }
 
@@ -574,7 +1426,9 @@ function renderMarkers(sites) {
         });
 
         var name = site.name || 'Unknown';
-        var capText = capVal + ' ' + displayUnit;
+        var capText = hasCapacity
+            ? ('Capacity: ' + capVal + ' ' + displayUnit)
+            : 'Capacity: N/A';
         var statusText = '<span style="color:' + color + '; text-transform:uppercase; font-weight:600;">' + status + '</span>';
 
         var tooltipHtml =
@@ -620,13 +1474,19 @@ function renderMarkers(sites) {
 // ============================================================
 // EMPTY / LOADING STATES
 // ============================================================
-function renderEmptyState() {
+function renderEmptyState(renderToken, reason, details) {
     if (self.layerGroup) { self.layerGroup.clearLayers(); }
     self.ctx.$widget.find('.js-stats').html(
         '<span class="stat-ok">0</span> | ' +
         '<span class="stat-warn">0</span> | ' +
         '<span class="stat-fault">0</span>'
     );
+    if (reason) {
+        debugWarn(renderToken, 'empty_state', {
+            reason: reason,
+            details: details || {}
+        });
+    }
     if (self.ctx.detectChanges) { self.ctx.detectChanges(); }
 }
 
