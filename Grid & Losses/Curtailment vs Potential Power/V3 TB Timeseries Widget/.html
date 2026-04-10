@@ -3,11 +3,35 @@
 
         <!-- ── Header ── -->
         <div class="card-header">
-            <div id="settings-btn" class="settings-btn" title="Widget Settings">⚙️</div>
+            <div id="settings-btn" class="settings-btn js-settings-btn" title="Widget Settings (Admin)">⚙️</div>
             <div class="card-title js-title">CURTAILMENT VS POTENTIAL POWER</div>
             <div class="header-status">
                 <span class="status-dot js-status-dot nodata"></span>
                 <span class="status-text js-status-text">WAITING</span>
+            </div>
+        </div>
+
+        <!-- ── Customer toolbar (timeframe + display unit dropdowns) ── -->
+        <div class="customer-toolbar">
+            <!-- Timeframe dropdown -->
+            <div class="cust-dropdown" id="dd-timeframe">
+                <button class="cust-dropdown-btn js-dd-tf-btn">Today ▾</button>
+                <div class="cust-dropdown-menu js-dd-tf-menu" style="display:none;">
+                    <div class="cust-dropdown-item" data-value="today">Today</div>
+                    <div class="cust-dropdown-item" data-value="yesterday">Yesterday</div>
+                    <div class="cust-dropdown-item" data-value="day_before">Day Before Yesterday</div>
+                    <div class="cust-dropdown-item" data-value="this_week">This Week</div>
+                    <div class="cust-dropdown-item" data-value="prev_week">Previous Week</div>
+                    <div class="cust-dropdown-item" data-value="this_month">This Month</div>
+                </div>
+            </div>
+            <!-- Display Unit dropdown -->
+            <div class="cust-dropdown" id="dd-dispunit">
+                <button class="cust-dropdown-btn js-dd-du-btn">kW ▾</button>
+                <div class="cust-dropdown-menu js-dd-du-menu" style="display:none;">
+                    <div class="cust-dropdown-item" data-value="kW">kW</div>
+                    <div class="cust-dropdown-item" data-value="MW">MW</div>
+                </div>
             </div>
         </div>
 
@@ -19,14 +43,14 @@
             </div>
         </div>
 
-        <!-- ── Summary bar (replaces old tooltip) ── -->
+        <!-- ── Summary bar ── -->
         <div class="summary-bar js-summary-bar">
             <span class="sb-item sb-label">Initialising…</span>
         </div>
 
         <!-- ── Footer legend ── -->
         <div class="card-footer">
-            <div class="legend-item">
+            <div class="legend-item js-legend-potential-wrap">
                 <div class="legend-line dashed"></div>
                 <div class="legend-label js-legend-potential">Potential Power</div>
             </div>
@@ -35,16 +59,19 @@
                 <div class="legend-label js-legend-exported">Exported Power</div>
             </div>
             <div class="legend-item">
+                <div class="legend-line curtail-line"></div>
+                <div class="legend-label js-legend-curtailed">Curtailment Limit</div>
+            </div>
+            <div class="legend-item">
                 <div class="legend-block curtailed"></div>
-                <div class="legend-label js-legend-curtailed">Curtailment Loss</div>
+                <div class="legend-label">Curtailment Loss</div>
             </div>
         </div>
 
     </div><!-- /.curt-card -->
 
     <!-- ══════════════════════════════════════════════
-         SETTINGS MODAL
-         Multi-column layout for efficient use of space
+         SETTINGS MODAL (Tenant Admin only)
          ══════════════════════════════════════════════ -->
     <div id="settings-modal" class="settings-modal-overlay" style="display:none;">
         <div class="settings-modal-content">
@@ -52,22 +79,6 @@
             <div class="modal-header">
                 <span class="modal-title">⚙ Widget Settings</span>
                 <span class="modal-subtitle">Changes apply after Save &amp; Reload</span>
-            </div>
-
-            <!-- Section: Timeframe -->
-            <div class="modal-section-label">Timeframe</div>
-            <div class="modal-grid modal-grid-1">
-                <div class="setting-group">
-                    <label>Period</label>
-                    <select id="set-timeframe">
-                        <option value="today">Today (full day)</option>
-                        <option value="yesterday">Yesterday</option>
-                        <option value="day_before">Day Before Yesterday</option>
-                        <option value="this_week">This Week</option>
-                        <option value="prev_week">Previous Week</option>
-                        <option value="this_month">This Month</option>
-                    </select>
-                </div>
             </div>
 
             <!-- Section: Data Keys -->
@@ -88,13 +99,13 @@
             <div class="modal-grid modal-grid-3">
                 <div class="setting-group setting-group-wide">
                     <label>Capacity Attribute Key</label>
-                    <input type="text" id="set-capacity-key" value="Plant Total Capacity" placeholder="Server-scope attribute name">
+                    <input type="text" id="set-capacity-key" value="Capacity" placeholder="Server-scope attribute name">
                 </div>
                 <div class="setting-group">
                     <label>Capacity Unit</label>
                     <select id="set-cap-unit">
+                        <option value="kW" selected>kW</option>
                         <option value="MW">MW</option>
-                        <option value="kW">kW</option>
                     </select>
                 </div>
                 <div class="setting-group">
@@ -107,16 +118,19 @@
             <div class="modal-section-label">Display</div>
             <div class="modal-grid modal-grid-3">
                 <div class="setting-group">
-                    <label>Display Unit</label>
-                    <input type="text" id="set-disp-unit" value="kW" placeholder="kW or MW">
-                </div>
-                <div class="setting-group">
                     <label>Decimal Places</label>
                     <input type="number" id="set-decimals" value="1" min="0" max="4" step="1">
                 </div>
                 <div class="setting-group">
                     <label>Error Margin (%)</label>
                     <input type="number" id="set-err-margin" value="10" min="0" max="100" step="1" title="Uncertainty applied to the curtailment loss estimate">
+                </div>
+                <div class="setting-group">
+                    <label>Show Potential Curve</label>
+                    <select id="set-show-potential">
+                        <option value="yes">Yes</option>
+                        <option value="no">No</option>
+                    </select>
                 </div>
             </div>
 
@@ -127,6 +141,6 @@
             </div>
 
         </div><!-- /.settings-modal-content -->
-    </div><!-- /#settings-modal -->
+    </div><!-- /.settings-modal-overlay -->
 
 </div><!-- /.pv-curtailment-widget -->

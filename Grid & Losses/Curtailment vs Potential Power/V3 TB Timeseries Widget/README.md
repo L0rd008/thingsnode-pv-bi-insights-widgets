@@ -1,12 +1,6 @@
-# Curtailment vs Potential Power - TIMESERIES VERSION (V3)
+# Curtailment vs Potential Power - TIMESERIES VERSION (V5)
 
 This is the Timeseries wrapper for the Curtailment algorithm.
-
-## Changes from Latest Values Version
-- **Inline Settings**: Since TB Timeseries widgets natively hide the `Advanced` settings tab for completely custom schema forms, an inline Settings Gear (⚙️) is rendered in the top right. This saves your configurations into the browser `localStorage` keyed locally to this widget instance ID.
-- **Dashboard Time Window**: This widget no longer fetches strictly `Midnight -> Now`. It respects the dashboard's master time window scale (e.g., from `Yesterday 12:00 PM` to `Today 5:00 PM`).
-- **Dynamic Bucket Calculation**: The 15-minute fixed chart bucket logic has been expanded to dynamically divide the chart bounds ensuring a high-performance rendering footprint across multi-day views.
-- **REST Fetch Logic Retained**: It still natively calls the telemetry database via REST internally rather than strictly consuming `self.ctx.data`, thus preserving the incredibly powerful "Comma-Separated Fallback Priority" logic!
 
 ## 1) Setup Checklist
 1. Add widget as **Time Series**.
@@ -15,12 +9,33 @@ This is the Timeseries wrapper for the Curtailment algorithm.
    - Entity Alias: Select your plant
    - Data keys: Add any key (e.g., `active_power`) just to satisfy ThingsBoard's UI constraints.
 3. Save the dashboard.
-4. Click the gear icon (⚙️) inside the widget header to map your telemetry keys:
+4. (Tenant Admin) Click the gear icon inside the widget header to map your telemetry keys:
    - `Actual Power Keys` (e.g. `active_power, power_v3`)
    - `Setpoint Keys` (e.g. `setpoint_active_power, curtailment_limit`)
-   - `Capacity Attribute Key` (e.g. `Plant Total Capacity`)
+   - `Capacity Attribute Key` (default: `Capacity`, assumed kW by default)
 
-## 2) Calculations
-Curtailment evaluates per standard bounds:
-`Allowed Power = Capacity * (Setpoint % / 100)`
-Red Zone renders only when the explicitly commanded limit is breached by theoretical clear sky potential.
+## 2) User Roles
+- **Customer Users / Customer Admins**: See two dropdown buttons (Timeframe, Display Unit) for day-to-day use. No access to advanced settings.
+- **Tenant Admins**: See the gear icon for full settings (data keys, capacity config, display options, show/hide potential curve).
+
+## 3) Display Behavior
+- **Day views** (Today, Yesterday, Day Before): Chart shows **5:00 AM to 7:00 PM** with **5-minute interval** buckets.
+- **Week views** (This Week, Previous Week): Full day (00:00-23:59) with **15-minute interval** buckets.
+- **Month view** (This Month): Full day with **60-minute interval** buckets.
+
+## 4) Datasets
+- **Potential Power** (optional dashed white line): Half-sine bell fitted to production hours. Toggle on/off in admin settings.
+- **Exported Power** (solid cyan line, filled to zero): Actual measured power.
+- **Curtailment Limit** (orange dashed line): Visible when setpoint < 100%. Shows the grid-imposed cap.
+- **Curtailment Loss** (red shaded area): Gap between the curtailment limit and exported power.
+- **Curtailment Markers** (orange dots): Mark the start and end of each curtailment event.
+
+## 5) Calculations
+- `Curtailment Ceiling = Capacity * (Setpoint% / 100)` when setpoint < 100%
+- `Loss per bucket = max(0, Capacity - Ceiling) * bucketHours`
+- Setpoint uses step-hold interpolation with 30-day lookback (handles irregular updates).
+
+## 6) Performance
+- Power data uses **server-side aggregation** (TB `agg=AVG`) to minimize payload size.
+- Setpoint data fetched separately with raw values (small dataset, needs lookback).
+- Capacity attribute, power telemetry, and setpoint telemetry are fetched **in parallel**.

@@ -1,40 +1,58 @@
 /* ════════════════════════════════════════════════════
-   Curtailment vs Potential Power — V4 TIMESERIES
+   Curtailment vs Potential Power — V5 TIMESERIES
    ThingsBoard v4.2.1.1 PE | Timeseries Widget
    ════════════════════════════════════════════════════
 
    ARCHITECTURE OVERVIEW
    ─────────────────────
-   Dataset 0 — "Potential Power"  (dashed white line)
-     Derived from actual active_power data.
-     A half-sine bell is fitted between the first and last
-     bucket where the plant was generating (> 0.5 % of rated
-     capacity).  Outside those bounds the value is null so
-     Chart.js renders nothing (no line at night).
+   Dataset 0 — "Potential Power"  (dashed white line, OPTIONAL)
+     Half-sine bell fitted between sunrise/sunset buckets.
+     Toggled via showPotentialCurve setting.
 
    Dataset 1 — "Exported Power"  (solid cyan + fill to zero)
-     Raw active_power bucketed into 96 equal intervals,
-     averaged correctly (sum / count).
+     Raw active_power averaged into 5-min buckets (day view)
+     or coarser buckets (week/month views).
 
-   Dataset 2 — "Curtailment Ceiling"  (invisible line)
-     When setpoint < 100 %:  ceiling = capacity × setpoint%/100
-     Otherwise:              ceiling = potential (no red fill)
-     The fill between datasets 1 and 2 is red above → shows
-     the power that was curtailed.
+   Dataset 2 — "Curtailment Ceiling"  (orange dashed line)
+     When setpoint < 100%:  ceiling = capacity × setpoint%/100
+     When setpoint >= 100%: ceiling = capacity (flat cap line)
+     Visible line shows the limit. Red fill between ceiling
+     and exported shows the curtailed energy.
+
+   Dataset 3 — "Curtailment Markers"  (orange dots)
+     Marks the first and last bucket of each curtailment event.
+
+   Bucket strategy
+   ───────────────
+   Day views  (today/yesterday/day_before): 5-minute intervals
+   Week views (this_week/prev_week):       15-minute intervals
+   Month view (this_month):                60-minute intervals
+
+   Display window
+   ──────────────
+   Day views:   5:00 AM → 7:00 PM (solar production hours)
+   Multi-day:   Full 00:00 → 23:59
 
    Energy-loss calculation
    ───────────────────────
    For every curtailed bucket:
-     loss[b] = max(0, potential[b] − ceiling[b]) × bucketHours
-   This is the kWh the plant could have produced but was
-   prevented from producing by the curtailment order.
+     loss[b] = max(0, capacity − ceiling[b]) × bucketHours
+       (only when setpoint < 100% and ceiling < capacity)
+   This is the energy the plant was prevented from producing.
    ════════════════════════════════════════════════════ */
 
 var $el, s, myChart, baseFontSize;
 var $title, $statusDot, $statusText;
 var $yTitle, $summaryBar, $modal;
-var $legendPotential, $legendExported, $legendCurtailed;
+var $legendPotentialWrap, $legendPotential, $legendExported, $legendCurtailed;
+var $settingsBtn;
 var isLiveData = false;
+
+/* ── Timeframe display labels ── */
+var TF_LABELS = {
+    today: 'Today', yesterday: 'Yesterday', day_before: 'Day Before',
+    this_week: 'This Week', prev_week: 'Prev Week', this_month: 'This Month'
+};
 
 /* ────────────────────────────────────────────────────
    SETTINGS
@@ -44,12 +62,13 @@ function loadSettings() {
         timeframe:         'today',
         actualPowerKeys:   'active_power',
         setpointKeys:      'setpoint_active_power, curtailment_limit',
-        plantCapacityKey:  'Plant Total Capacity',
-        capacityUnit:      'MW',
+        plantCapacityKey:  'Capacity',
+        capacityUnit:      'kW',
         displayUnit:       'kW',
         theoreticalMargin: 10,
         fallbackPower:     1000,
-        decimals:          1
+        decimals:          1,
+        showPotentialCurve: true
     };
     try {
         var stored = localStorage.getItem('tb_curt_settings_' + self.ctx.widgetConfig.id);
@@ -59,30 +78,28 @@ function loadSettings() {
 }
 
 function saveSettings() {
-    s.timeframe         = $('#set-timeframe').val();
     s.actualPowerKeys   = $('#set-actual-keys').val();
     s.setpointKeys      = $('#set-setpoint-keys').val();
     s.plantCapacityKey  = $('#set-capacity-key').val();
     s.capacityUnit      = $('#set-cap-unit').val();
-    s.displayUnit       = $('#set-disp-unit').val();
     s.theoreticalMargin = parseFloat($('#set-err-margin').val())     || 10;
     s.fallbackPower     = parseFloat($('#set-fallback-power').val()) || 1000;
     s.decimals          = parseInt($('#set-decimals').val())          || 1;
+    s.showPotentialCurve = ($('#set-show-potential').val() === 'yes');
     try {
         localStorage.setItem('tb_curt_settings_' + self.ctx.widgetConfig.id, JSON.stringify(s));
     } catch (e) {}
 }
 
 function populateModal() {
-    $('#set-timeframe').val(s.timeframe       || 'today');
     $('#set-actual-keys').val(s.actualPowerKeys);
     $('#set-setpoint-keys').val(s.setpointKeys);
     $('#set-capacity-key').val(s.plantCapacityKey);
     $('#set-cap-unit').val(s.capacityUnit);
-    $('#set-disp-unit').val(s.displayUnit);
     $('#set-err-margin').val(s.theoreticalMargin);
     $('#set-fallback-power').val(s.fallbackPower);
     $('#set-decimals').val(s.decimals !== undefined ? s.decimals : 1);
+    $('#set-show-potential').val(s.showPotentialCurve ? 'yes' : 'no');
 }
 
 /* ────────────────────────────────────────────────────
@@ -92,45 +109,126 @@ self.onInit = function () {
     $el = self.ctx.$container;
     loadSettings();
 
-    $title           = $el.find('.js-title');
-    $statusDot       = $el.find('.js-status-dot');
-    $statusText      = $el.find('.js-status-text');
-    $yTitle          = $el.find('.js-y-title');
-    $summaryBar      = $el.find('.js-summary-bar');
-    $modal           = $el.find('#settings-modal');
-    $legendPotential = $el.find('.js-legend-potential');
-    $legendExported  = $el.find('.js-legend-exported');
-    $legendCurtailed = $el.find('.js-legend-curtailed');
+    $title              = $el.find('.js-title');
+    $statusDot          = $el.find('.js-status-dot');
+    $statusText         = $el.find('.js-status-text');
+    $yTitle             = $el.find('.js-y-title');
+    $summaryBar         = $el.find('.js-summary-bar');
+    $modal              = $el.find('#settings-modal');
+    $legendPotentialWrap= $el.find('.js-legend-potential-wrap');
+    $legendPotential    = $el.find('.js-legend-potential');
+    $legendExported     = $el.find('.js-legend-exported');
+    $legendCurtailed    = $el.find('.js-legend-curtailed');
+    $settingsBtn        = $el.find('.js-settings-btn');
 
+    applyRoleVisibility();
     updateDom();
     bindSettingsUI();
+    bindCustomerDropdowns();
     initChart();
     self.onResize();
     fetchLiveData();
 };
 
 /* ────────────────────────────────────────────────────
+   ROLE-BASED VISIBILITY
+   ──────────────────────────────────────────────────── */
+function isTenantAdmin() {
+    try {
+        var auth = self.ctx.currentUser && self.ctx.currentUser.authority;
+        return (auth === 'TENANT_ADMIN' || auth === 'SYS_ADMIN');
+    } catch (e) { return false; }
+}
+
+function applyRoleVisibility() {
+    if (!isTenantAdmin()) {
+        $settingsBtn.addClass('hidden');
+    }
+}
+
+/* ────────────────────────────────────────────────────
    DOM
    ──────────────────────────────────────────────────── */
 function updateDom() {
     $title.text(s.widgetTitle || 'CURTAILMENT VS POTENTIAL POWER');
-    if ($yTitle.length)          $yTitle.text('POWER (' + (s.displayUnit || 'kW') + ')');
-    if ($legendPotential.length) $legendPotential.text('Potential Power');
-    if ($legendExported.length)  $legendExported.text('Exported Power');
-    if ($legendCurtailed.length) $legendCurtailed.text('Curtailment Loss');
+    if ($yTitle.length) $yTitle.text('POWER (' + (s.displayUnit || 'kW') + ')');
+
+    /* Potential power legend visibility */
+    if ($legendPotentialWrap.length) {
+        $legendPotentialWrap.css('display', s.showPotentialCurve ? 'flex' : 'none');
+    }
+
+    /* Sync customer dropdown labels */
+    $el.find('.js-dd-tf-btn').text((TF_LABELS[s.timeframe] || 'Today') + ' ▾');
+    $el.find('.js-dd-du-btn').text((s.displayUnit || 'kW') + ' ▾');
+
+    /* Mark active items */
+    $el.find('#dd-timeframe .cust-dropdown-item').removeClass('active')
+       .filter('[data-value="' + s.timeframe + '"]').addClass('active');
+    $el.find('#dd-dispunit .cust-dropdown-item').removeClass('active')
+       .filter('[data-value="' + s.displayUnit + '"]').addClass('active');
 }
 
 function bindSettingsUI() {
-    $el.find('#settings-btn').on('click', function () { populateModal(); $modal.fadeIn(200); });
-    $el.find('#btn-cancel').on('click',   function () { $modal.fadeOut(200); });
-    $el.find('#btn-save').on('click',     function () {
+    $settingsBtn.on('click', function () { populateModal(); $modal.fadeIn(200); });
+    $el.find('#btn-cancel').on('click', function () { $modal.fadeOut(200); });
+    $el.find('#btn-save').on('click', function () {
         saveSettings();
         updateDom();
         $modal.fadeOut(200);
-        if (myChart) { myChart.destroy(); myChart = null; }
-        initChart();
-        fetchLiveData();
+        rebuildAndFetch();
     });
+}
+
+function bindCustomerDropdowns() {
+    /* Timeframe dropdown */
+    var $tfBtn  = $el.find('.js-dd-tf-btn');
+    var $tfMenu = $el.find('.js-dd-tf-menu');
+    $tfBtn.on('click', function (e) {
+        e.stopPropagation();
+        $el.find('.cust-dropdown-menu').not($tfMenu).hide();
+        $tfMenu.toggle();
+    });
+    $tfMenu.on('click', '.cust-dropdown-item', function () {
+        s.timeframe = $(this).data('value');
+        persistSetting();
+        updateDom();
+        $tfMenu.hide();
+        rebuildAndFetch();
+    });
+
+    /* Display Unit dropdown */
+    var $duBtn  = $el.find('.js-dd-du-btn');
+    var $duMenu = $el.find('.js-dd-du-menu');
+    $duBtn.on('click', function (e) {
+        e.stopPropagation();
+        $el.find('.cust-dropdown-menu').not($duMenu).hide();
+        $duMenu.toggle();
+    });
+    $duMenu.on('click', '.cust-dropdown-item', function () {
+        s.displayUnit = $(this).data('value');
+        persistSetting();
+        updateDom();
+        $duMenu.hide();
+        rebuildAndFetch();
+    });
+
+    /* Click outside closes dropdowns */
+    $(document).on('click', function () {
+        $el.find('.cust-dropdown-menu').hide();
+    });
+}
+
+function persistSetting() {
+    try {
+        localStorage.setItem('tb_curt_settings_' + self.ctx.widgetConfig.id, JSON.stringify(s));
+    } catch (e) {}
+}
+
+function rebuildAndFetch() {
+    if (myChart) { myChart.destroy(); myChart = null; }
+    initChart();
+    fetchLiveData();
 }
 
 function updateStatusBadge(state) {
@@ -158,14 +256,14 @@ function initChart() {
         afterDraw: function (chart) {
             var ds = chart.data.datasets;
             if (ds.length < 3) return;
-            var potD = ds[0].data, expD = ds[1].data, ceilD = ds[2].data;
-            if (!potD || !potD.length) return;
+            var expD = ds[1].data, ceilD = ds[2].data;
+            if (!ceilD || !ceilD.length) return;
             var area = chart.chartArea; if (!area) return;
             var xs = chart.scales.x, ys = chart.scales.y, cc = chart.ctx;
 
             var maxLoss = 0, maxIdx = -1;
             for (var i = 0; i < ceilD.length; i++) {
-                if (potD[i] == null || expD[i] == null || ceilD[i] == null) continue;
+                if (expD[i] == null || ceilD[i] == null) continue;
                 var loss = ceilD[i] - expD[i];
                 if (loss > maxLoss) { maxLoss = loss; maxIdx = i; }
             }
@@ -209,12 +307,18 @@ function initChart() {
         }
     };
 
+    /* Dynamic tick limit based on timeframe */
+    var tf = s.timeframe || 'today';
+    var xTickLimit = 12;
+    if (tf === 'this_week' || tf === 'prev_week') xTickLimit = 7;
+    else if (tf === 'this_month') xTickLimit = 15;
+
     myChart = new Chart(ctx, {
         type: 'line',
         data: {
             labels: [],
             datasets: [
-                /* 0 — Potential Power */
+                /* 0 — Potential Power (optional) */
                 {
                     label: 'Potential Power',
                     data: [],
@@ -223,7 +327,8 @@ function initChart() {
                     segment: { borderDash: function () { return [6, 4]; } },
                     pointRadius: 0, pointHoverRadius: 3,
                     pointHoverBackgroundColor: 'rgba(255,255,255,0.7)',
-                    tension: 0.35, fill: false, spanGaps: false, order: 3
+                    tension: 0.35, fill: false, spanGaps: false, order: 4,
+                    hidden: !s.showPotentialCurve
                 },
                 /* 1 — Exported Power */
                 {
@@ -235,16 +340,33 @@ function initChart() {
                     pointHoverBorderColor: '#FFFFFF', pointHoverBorderWidth: 2,
                     tension: 0.35, fill: 'origin',
                     backgroundColor: 'rgba(6,245,255,0.15)',
-                    spanGaps: true, order: 2
+                    spanGaps: true, order: 3
                 },
-                /* 2 — Curtailment Ceiling (invisible; fills red above dataset 1) */
+                /* 2 — Curtailment Ceiling (visible orange dashed + red fill above ds1) */
                 {
-                    label: '_ceil',
+                    label: 'Curtailment Limit',
                     data: [],
-                    borderColor: 'transparent', borderWidth: 0,
-                    pointRadius: 0, pointHoverRadius: 0,
+                    borderColor: '#FF9800',
+                    borderWidth: 1.5,
+                    borderDash: [5, 3],
+                    pointRadius: 0, pointHoverRadius: 3,
+                    pointHoverBackgroundColor: '#FF9800',
                     tension: 0.35, spanGaps: false,
                     fill: { target: 1, above: 'rgba(229,57,53,0.38)', below: 'transparent' },
+                    order: 2
+                },
+                /* 3 — Curtailment Markers (start/end dots) */
+                {
+                    label: '_markers',
+                    data: [],
+                    borderColor: '#FF9800',
+                    backgroundColor: '#FF9800',
+                    borderWidth: 2,
+                    pointRadius: 5,
+                    pointStyle: 'circle',
+                    pointHoverRadius: 7,
+                    showLine: false,
+                    fill: false,
                     order: 1
                 }
             ]
@@ -256,7 +378,7 @@ function initChart() {
             scales: {
                 x: {
                     grid:  { color: 'rgba(255,255,255,0.06)', drawBorder: false },
-                    ticks: { color: '#90A4AE', font: { size: 9, family: 'Roboto,sans-serif' }, maxTicksLimit: 10, maxRotation: 0 }
+                    ticks: { color: '#90A4AE', font: { size: 9, family: 'Roboto,sans-serif' }, maxTicksLimit: xTickLimit, maxRotation: 0 }
                 },
                 y: {
                     beginAtZero: true, min: 0,
@@ -275,10 +397,11 @@ function initChart() {
                     cornerRadius: 4,
                     padding: { top: 6, right: 10, bottom: 6, left: 10 },
                     displayColors: false,
-                    filter: function (item) { return item.datasetIndex !== 2; },
+                    filter: function (item) { return item.datasetIndex <= 2; },
                     callbacks: {
                         title: function (items) { return items.length ? items[0].label : ''; },
                         label: function (ctx2) {
+                            if (ctx2.datasetIndex === 3) return null;
                             if (ctx2.parsed.y == null) return null;
                             return ctx2.dataset.label + ': ' + ctx2.parsed.y.toFixed(dec) + ' ' + unitLabel;
                         },
@@ -288,9 +411,8 @@ function initChart() {
                             var idx  = items[0].dataIndex;
                             var eVal = cd.datasets[1].data[idx];
                             var ceil = cd.datasets[2].data[idx];
-                            var pot  = cd.datasets[0].data[idx];
-                            if (pot == null || ceil == null) return '';
-                            var loss = Math.max(pot - ceil, 0);
+                            if (eVal == null || ceil == null) return '';
+                            var loss = Math.max(ceil - eVal, 0);
                             if (loss < 0.01) return '';
                             return '⚠ Curtailment Loss: ' + loss.toFixed(dec) + ' ' + unitLabel;
                         }
@@ -310,31 +432,59 @@ function parseCommaList(str) {
     return str.split(',').map(function (k) { return k.trim(); }).filter(function (k) { return k.length > 0; });
 }
 
+function isDayView(tf) {
+    return (tf === 'today' || tf === 'yesterday' || tf === 'day_before');
+}
+
 function getTimeBounds(tf) {
     var now = new Date();
     var y = now.getFullYear(), mo = now.getMonth(), d = now.getDate();
     var st, et;
-    if      (tf === 'today')      { st = new Date(y,mo,d,0,0,0).getTime();     et = new Date(y,mo,d,23,59,59).getTime(); }
-    else if (tf === 'yesterday')  { st = new Date(y,mo,d-1,0,0,0).getTime();   et = new Date(y,mo,d-1,23,59,59).getTime(); }
-    else if (tf === 'day_before') { st = new Date(y,mo,d-2,0,0,0).getTime();   et = new Date(y,mo,d-2,23,59,59).getTime(); }
-    else if (tf === 'this_week')  {
+
+    if (tf === 'today') {
+        st = new Date(y, mo, d, 5, 0, 0).getTime();   /* 5 AM */
+        et = new Date(y, mo, d, 19, 0, 0).getTime();   /* 7 PM */
+    }
+    else if (tf === 'yesterday') {
+        st = new Date(y, mo, d-1, 5, 0, 0).getTime();
+        et = new Date(y, mo, d-1, 19, 0, 0).getTime();
+    }
+    else if (tf === 'day_before') {
+        st = new Date(y, mo, d-2, 5, 0, 0).getTime();
+        et = new Date(y, mo, d-2, 19, 0, 0).getTime();
+    }
+    else if (tf === 'this_week') {
         var dow = now.getDay() || 7;
-        st = new Date(y,mo,d-dow+1,0,0,0).getTime(); et = now.getTime();
+        st = new Date(y, mo, d-dow+1, 0, 0, 0).getTime();
+        et = now.getTime();
     }
-    else if (tf === 'prev_week')  {
+    else if (tf === 'prev_week') {
         var off = (now.getDay() || 7) - 1;
-        var thisMon = new Date(y,mo,d-off,0,0,0);
-        st = thisMon.getTime() - 7*86400000; et = thisMon.getTime() - 1000;
+        var thisMon = new Date(y, mo, d-off, 0, 0, 0);
+        st = thisMon.getTime() - 7*86400000;
+        et = thisMon.getTime() - 1000;
     }
-    else if (tf === 'this_month') { st = new Date(y,mo,1,0,0,0).getTime(); et = now.getTime(); }
-    else                          { st = new Date(y,mo,d,0,0,0).getTime(); et = new Date(y,mo,d,23,59,59).getTime(); }
+    else if (tf === 'this_month') {
+        st = new Date(y, mo, 1, 0, 0, 0).getTime();
+        et = now.getTime();
+    }
+    else {
+        st = new Date(y, mo, d, 5, 0, 0).getTime();
+        et = new Date(y, mo, d, 19, 0, 0).getTime();
+    }
 
     if (et > now.getTime()) et = now.getTime();
     return { minTime: st, maxTime: Math.max(st + 1, et) };
 }
 
+function getBucketMs(tf) {
+    if (isDayView(tf))                                      return 5  * 60 * 1000;  /* 5 min */
+    if (tf === 'this_week' || tf === 'prev_week')           return 15 * 60 * 1000;  /* 15 min */
+    return 60 * 60 * 1000;                                                           /* 1 hour */
+}
+
 /* ────────────────────────────────────────────────────
-   LIVE DATA FETCH
+   LIVE DATA FETCH  (parallel capacity + telemetry)
    ──────────────────────────────────────────────────── */
 function fetchLiveData() {
     if (!self.ctx.datasources || !self.ctx.datasources.length) { renderNoData(); return; }
@@ -348,27 +498,30 @@ function fetchLiveData() {
     var actualKeys = parseCommaList(s.actualPowerKeys);
     var spKeys     = parseCommaList(s.setpointKeys);
     var capKey     = s.plantCapacityKey;
-    var tsKeys     = actualKeys.concat(spKeys).join(',');
     var bounds     = getTimeBounds(s.timeframe || 'today');
     var startTs    = bounds.minTime;
     var endTs      = bounds.maxTime;
+    var bucketMs   = getBucketMs(s.timeframe || 'today');
 
-    var doFetch = function () {
-        var url = '/api/plugins/telemetry/' + entTypeStr + '/' + entIdStr +
-            '/values/timeseries?keys=' + encodeURIComponent(tsKeys) +
-            '&startTs=' + (startTs - 2592000000) + '&endTs=' + endTs +
-            '&limit=50000&agg=NONE';
-        try {
-            self.ctx.http.get(url).subscribe(
-                function (data) {
-                    if (data && Object.keys(data).length > 0) processLiveTimeSeries(data, startTs, endTs);
-                    else loadSimulation(startTs, endTs);
-                },
-                function () { loadSimulation(startTs, endTs); }
-            );
-        } catch (e) { loadSimulation(startTs, endTs); }
+    var baseUrl = '/api/plugins/telemetry/' + entTypeStr + '/' + entIdStr;
+
+    /* ── We fire up to 3 requests in parallel ── */
+    var capacityDone = false, powerDone = false, setpointDone = false;
+    var powerData = null, setpointData = null;
+
+    var tryProcess = function () {
+        if (!capacityDone || !powerDone || !setpointDone) return;
+        var merged = {};
+        if (powerData)    Object.assign(merged, powerData);
+        if (setpointData) Object.assign(merged, setpointData);
+        if (merged && Object.keys(merged).length > 0) {
+            processLiveTimeSeries(merged, startTs, endTs, bucketMs);
+        } else {
+            loadSimulation(startTs, endTs, bucketMs);
+        }
     };
 
+    /* 1) Capacity attribute */
     var attrSvc = self.ctx.attributeService;
     if (attrSvc && capKey) {
         var entObj = { id: entIdStr, entityType: entTypeStr };
@@ -381,20 +534,51 @@ function fetchLiveData() {
                             if (found) self._capacityVal = found.value;
                         }
                     } catch (e2) {}
-                    doFetch();
+                    capacityDone = true; tryProcess();
                 },
-                function () { doFetch(); }
+                function () { capacityDone = true; tryProcess(); }
             );
-        } catch (e) { doFetch(); }
+        } catch (e) { capacityDone = true; tryProcess(); }
     } else {
-        doFetch();
+        capacityDone = true;
     }
+
+    /* 2) Power telemetry — use server-side aggregation */
+    var powerKeys = actualKeys.join(',');
+    var powerUrl = baseUrl + '/values/timeseries?keys=' + encodeURIComponent(powerKeys) +
+        '&startTs=' + startTs + '&endTs=' + endTs +
+        '&interval=' + bucketMs + '&agg=AVG&limit=50000';
+    try {
+        self.ctx.http.get(powerUrl).subscribe(
+            function (data) { powerData = data; powerDone = true; tryProcess(); },
+            function ()     { powerDone = true; tryProcess(); }
+        );
+    } catch (e) { powerDone = true; tryProcess(); }
+
+    /* 3) Setpoint telemetry — raw with lookback (small dataset) */
+    var spKeysStr = spKeys.join(',');
+    if (spKeysStr) {
+        var spUrl = baseUrl + '/values/timeseries?keys=' + encodeURIComponent(spKeysStr) +
+            '&startTs=' + (startTs - 2592000000) + '&endTs=' + endTs +
+            '&limit=10000&agg=NONE';
+        try {
+            self.ctx.http.get(spUrl).subscribe(
+                function (data) { setpointData = data; setpointDone = true; tryProcess(); },
+                function ()     { setpointDone = true; tryProcess(); }
+            );
+        } catch (e) { setpointDone = true; tryProcess(); }
+    } else {
+        setpointDone = true;
+    }
+
+    /* If both capacity and setpoint were synchronous, kick off */
+    tryProcess();
 }
 
 /* ────────────────────────────────────────────────────
    DATA PROCESSING — LIVE
    ──────────────────────────────────────────────────── */
-function processLiveTimeSeries(rawData, minTime, maxTime) {
+function processLiveTimeSeries(rawData, minTime, maxTime, bucketMs) {
     isLiveData = true;
     updateStatusBadge('live');
 
@@ -408,7 +592,7 @@ function processLiveTimeSeries(rawData, minTime, maxTime) {
             rawActual = rawData[actualKeys[i]]; break;
         }
     }
-    if (!rawActual) { loadSimulation(minTime, maxTime); return; }
+    if (!rawActual) { loadSimulation(minTime, maxTime, bucketMs); return; }
 
     /* first matching setpoint series */
     var rawSP = null;
@@ -434,19 +618,19 @@ function processLiveTimeSeries(rawData, minTime, maxTime) {
     var capacity = parseFloat(self._capacityVal);
     if (isNaN(capacity) || capacity <= 0) capacity = parseFloat(s.fallbackPower) || 1000;
     var powUnit = s.displayUnit || 'kW';
-    var capUnit = s.capacityUnit || 'MW';
+    var capUnit = s.capacityUnit || 'kW';
     if (capUnit === 'MW' && powUnit === 'kW') capacity *= 1000;
     if (capUnit === 'kW' && powUnit === 'MW') capacity *= 0.001;
 
-    /* 96 equal buckets */
-    var N        = 96;
-    var bucketMs = (maxTime - minTime) / N;
-    var labels   = [];
-    var bucketSum  = new Array(N).fill(0);
-    var bucketHits = new Array(N).fill(0);
+    /* dynamic buckets */
+    var N = Math.max(1, Math.floor((maxTime - minTime) / bucketMs));
+    var labels      = [];
+    var bucketSum   = new Array(N).fill(0);
+    var bucketHits  = new Array(N).fill(0);
     var dataExported    = new Array(N).fill(null);
     var dataPotential   = new Array(N).fill(null);
     var dataCurtailCeil = new Array(N).fill(null);
+    var dataMarkers     = new Array(N).fill(null);
 
     var timeDiffH = (maxTime - minTime) / 3600000;
     var fmtOpts   = (timeDiffH > 36)
@@ -469,109 +653,130 @@ function processLiveTimeSeries(rawData, minTime, maxTime) {
         dataExported[bm] = bucketHits[bm] > 0 ? bucketSum[bm] / bucketHits[bm] : null;
     }
 
-    /* ── Potential power curve ─────────────────────────────────────────────
-       We derive the potential curve entirely from the actual production data:
-       - Find the FIRST bucket where exported > 0.5% rated capacity  (sunrise)
-       - Find the LAST  bucket where exported > 0.5% rated capacity  (sunset)
-       - Fit a half-sine bell between those two points, peak = capacity
-       - Clamp from below: potential ≥ exported at every point
-       This represents "what this plant COULD produce under clear-sky conditions"
-       during the hours when it was actually operating today.
-       ───────────────────────────────────────────────────────────────────── */
-    var THRESHOLD = capacity * 0.005;   /* 0.5 % of rated = "sun is up" */
-    var firstOn = -1, lastOn = -1;
-    for (var fi = 0; fi < N; fi++) {
-        if (dataExported[fi] !== null && dataExported[fi] > THRESHOLD) {
-            if (firstOn === -1) firstOn = fi;
-            lastOn = fi;
-        }
-    }
-
-    if (firstOn >= 0 && lastOn > firstOn) {
-        var span = lastOn - firstOn;
-        for (var pi = firstOn; pi <= lastOn; pi++) {
-            var frac = (pi - firstOn) / span;
-            dataPotential[pi] = capacity * Math.sin(frac * Math.PI);
-        }
-        /* ensure potential ≥ exported (cloud-enhancement can briefly push
-           actual above the smooth model — clamp prevents inverted red zone) */
-        for (var ci2 = firstOn; ci2 <= lastOn; ci2++) {
-            if (dataExported[ci2] !== null && dataPotential[ci2] < dataExported[ci2]) {
-                dataPotential[ci2] = dataExported[ci2];
+    /* ── Potential power curve (optional) ───────────────────────────────── */
+    if (s.showPotentialCurve) {
+        var THRESHOLD = capacity * 0.005;
+        var firstOn = -1, lastOn = -1;
+        for (var fi = 0; fi < N; fi++) {
+            if (dataExported[fi] !== null && dataExported[fi] > THRESHOLD) {
+                if (firstOn === -1) firstOn = fi;
+                lastOn = fi;
             }
         }
-    } else if (firstOn >= 0 && firstOn === lastOn) {
-        /* Only one active bucket (edge of day or very short window) */
-        dataPotential[firstOn] = Math.max(dataExported[firstOn] || 0, capacity * 0.01);
+        if (firstOn >= 0 && lastOn > firstOn) {
+            var span = lastOn - firstOn;
+            for (var pi = firstOn; pi <= lastOn; pi++) {
+                var frac = (pi - firstOn) / span;
+                dataPotential[pi] = capacity * Math.sin(frac * Math.PI);
+            }
+            for (var ci2 = firstOn; ci2 <= lastOn; ci2++) {
+                if (dataExported[ci2] !== null && dataPotential[ci2] < dataExported[ci2]) {
+                    dataPotential[ci2] = dataExported[ci2];
+                }
+            }
+        } else if (firstOn >= 0 && firstOn === lastOn) {
+            dataPotential[firstOn] = Math.max(dataExported[firstOn] || 0, capacity * 0.01);
+        }
     }
-    /* All null outside → Chart.js draws nothing at night */
 
     /* ── Curtailment ceiling ───────────────────────────────────────────────
-       ceiling[b] = capacity × (setpointPct / 100)  when setpoint < 99 %
-                  = potential[b]                     otherwise (no red fill)
+       ceiling[b] = capacity × (setpointPct / 100)   when setpoint < 100%
+                  = null                              otherwise (no ceiling drawn)
 
-       Example: 10 MW plant, setpoint 10% → ceiling = 1 MW.
-       If potential at that hour = 6 MW, loss = 5 MW.
+       The ceiling is always relative to full capacity (not the sine curve),
+       because curtailment is a hard limit from the grid operator.
        ───────────────────────────────────────────────────────────────────── */
+    var curtailActive = false;
     for (var b = 0; b < N; b++) {
-        if (dataPotential[b] === null) { dataCurtailCeil[b] = null; continue; }
+        if (dataExported[b] === null) { dataCurtailCeil[b] = null; continue; }
         var midTs  = minTime + (b + 0.5) * bucketMs;
         var spPct  = getSetpointPct(midTs);
-        var ceiling = capacity * (spPct / 100);
 
-        dataCurtailCeil[b] = (spPct < 99.0 && dataPotential[b] > ceiling)
-            ? ceiling                 /* curtailed: red fill visible */
-            : dataPotential[b];       /* not curtailed: ceiling = potential, no fill */
+        if (spPct < 100.0) {
+            var ceiling = capacity * (spPct / 100);
+            dataCurtailCeil[b] = ceiling;
+
+            /* Mark start/end of curtailment events */
+            if (!curtailActive) {
+                dataMarkers[b] = ceiling;   /* curtailment start */
+                curtailActive = true;
+            }
+        } else {
+            if (curtailActive && b > 0) {
+                dataMarkers[b - 1] = dataCurtailCeil[b - 1];   /* curtailment end */
+            }
+            dataCurtailCeil[b] = null;
+            curtailActive = false;
+        }
+    }
+    /* If curtailment was active at the very last bucket, mark it as end */
+    if (curtailActive && N > 0 && dataCurtailCeil[N - 1] !== null) {
+        dataMarkers[N - 1] = dataCurtailCeil[N - 1];
     }
 
-    renderChartData(labels, dataPotential, dataExported, dataCurtailCeil);
-    updateSummary(dataPotential, dataExported, dataCurtailCeil, bucketMs, capacity);
+    renderChartData(labels, dataPotential, dataExported, dataCurtailCeil, dataMarkers);
+    updateSummary(dataExported, dataCurtailCeil, bucketMs, capacity);
 }
 
 /* ────────────────────────────────────────────────────
    FALLBACK SIMULATION
    ──────────────────────────────────────────────────── */
-function loadSimulation(minTime, maxTime) {
+function loadSimulation(minTime, maxTime, bucketMs) {
     isLiveData = false;
     updateStatusBadge('simulated');
 
     var capacity  = parseFloat(s.fallbackPower) || 1000;
-    var N         = 96;
-    var bMs       = (maxTime - minTime) / N;
+    var N         = Math.max(1, Math.floor((maxTime - minTime) / bucketMs));
     var timeDiffH = (maxTime - minTime) / 3600000;
     var fmtOpts   = (timeDiffH > 36)
         ? { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }
         : { hour: '2-digit', minute: '2-digit' };
     var fmt = new Intl.DateTimeFormat('default', fmtOpts);
 
-    var labels = [], potential = [], exported = [], ceiling = [];
-    var SUN_RISE = 6.0, SUN_SET = 18.5;  /* realistic PV operating hours */
+    var labels = [], potential = [], exported = [], ceiling = [], markers = [];
+    var SUN_RISE = 5.0, SUN_SET = 19.0;
 
+    var prevCurt = false;
     for (var i = 0; i < N; i++) {
-        var bt   = minTime + i * bMs;
+        var bt   = minTime + i * bucketMs;
         var dObj = new Date(bt);
         var hf   = dObj.getHours() + dObj.getMinutes() / 60;
         labels.push(fmt.format(dObj));
 
         if (hf < SUN_RISE || hf > SUN_SET) {
-            potential.push(null); exported.push(null); ceiling.push(null); continue;
+            potential.push(null); exported.push(null); ceiling.push(null); markers.push(null);
+            prevCurt = false;
+            continue;
         }
         var frac = (hf - SUN_RISE) / (SUN_SET - SUN_RISE);
         var pot  = capacity * Math.sin(frac * Math.PI);
-        potential.push(pot);
+        potential.push(s.showPotentialCurve ? pot : null);
 
-        /* Simulate curtailment 10:00 – 14:00, setpoint 40 % → ceiling = 0.40 × capacity */
         var curtailed = (hf >= 10.0 && hf <= 14.0);
         var cap40     = capacity * 0.40;
         var exp       = curtailed
             ? Math.min(pot, cap40) * (0.97 + 0.03 * Math.random())
             : pot * (0.92 + 0.05 * Math.random());
         exported.push(exp);
-        ceiling.push(curtailed ? cap40 : pot);
+
+        if (curtailed) {
+            ceiling.push(cap40);
+            if (!prevCurt) { markers.push(cap40); } else { markers.push(null); }
+            prevCurt = true;
+        } else {
+            if (prevCurt && i > 0) { markers[i - 1] = ceiling[i - 1]; }
+            ceiling.push(null);
+            markers.push(null);
+            prevCurt = false;
+        }
+    }
+    /* end marker if curtailment active at last bucket */
+    if (prevCurt && N > 0 && ceiling[N - 1] !== null) {
+        markers[N - 1] = ceiling[N - 1];
     }
 
-    renderChartData(labels, potential, exported, ceiling);
-    updateSummary(potential, exported, ceiling, bMs, capacity);
+    renderChartData(labels, potential, exported, ceiling, markers);
+    updateSummary(exported, ceiling, bucketMs, capacity);
 }
 
 /* ────────────────────────────────────────────────────
@@ -586,42 +791,46 @@ function renderNoData() {
     }
 }
 
-function renderChartData(labels, p, e, c) {
+function renderChartData(labels, p, e, c, m) {
     if (!myChart) return;
-    myChart.data.labels          = labels;
+    myChart.data.labels           = labels;
     myChart.data.datasets[0].data = p;
     myChart.data.datasets[1].data = e;
     myChart.data.datasets[2].data = c;
+    myChart.data.datasets[3].data = m;
+    myChart.data.datasets[0].hidden = !s.showPotentialCurve;
     myChart.update('none');
 }
 
-function updateSummary(potential, exported, ceiling, bucketMs, capacity) {
+function updateSummary(exported, ceiling, bucketMs, capacity) {
     if (!$summaryBar || !$summaryBar.length) return;
 
     var hPerBucket = bucketMs / 3600000;
     var dec        = parseInt(s.decimals) || 1;
     var unit       = s.displayUnit || 'kW';
-    var eUnit      = unit + 'h';    /* kWh or MWh */
+    var eUnit      = unit + 'h';
 
-    var totalPotential = 0, totalExported = 0, totalLoss = 0, curtBuckets = 0;
+    var totalExported = 0, totalLoss = 0, curtBuckets = 0;
+    var totalPossible = 0;
 
     for (var i = 0; i < ceiling.length; i++) {
-        var potV  = potential[i], expV = exported[i], ceilV = ceiling[i];
-        if (potV  == null) continue;
-        totalPotential += potV * hPerBucket;
-        if (expV  != null) totalExported += expV * hPerBucket;
-        if (ceilV != null) {
-            /* Loss = potential that was blocked by the setpoint ceiling */
-            var loss = Math.max(potV - ceilV, 0);
+        var expV  = exported[i], ceilV = ceiling[i];
+        if (expV != null) totalExported += expV * hPerBucket;
+
+        if (ceilV != null && expV != null) {
+            /* Curtailment active: loss = capacity - ceiling (what was blocked) */
+            var loss = Math.max(capacity - ceilV, 0);
             if (loss > 0) { totalLoss += loss * hPerBucket; curtBuckets++; }
+            totalPossible += capacity * hPerBucket;
+        } else if (expV != null) {
+            totalPossible += expV * hPerBucket;
         }
     }
 
     var margin    = totalLoss * ((parseFloat(s.theoreticalMargin) || 10) / 100);
     var curtHours = (curtBuckets * bucketMs / 3600000).toFixed(1);
-    var pctLost   = totalPotential > 0 ? ((totalLoss / totalPotential) * 100).toFixed(1) : '0.0';
+    var pctLost   = totalPossible > 0 ? ((totalLoss / totalPossible) * 100).toFixed(1) : '0.0';
 
-    /* Auto-scale: kW → show in kWh; if huge, promote to MWh */
     var dispScale = 1, dispUnit = eUnit;
     if (unit === 'kW' && totalLoss > 9999) { dispScale = 1000; dispUnit = 'MWh'; }
 
@@ -643,9 +852,7 @@ function updateSummary(potential, exported, ceiling, bucketMs, capacity) {
     }
 
     html += '<span class="sb-sep">|</span>';
-    html += '<span class="sb-item sb-muted">Potential: ' + (totalPotential / dispScale).toFixed(dec) + ' ' + dispUnit + '</span>';
-    html += '<span class="sb-sep">|</span>';
-    html += '<span class="sb-item sb-muted">Exported: '  + (totalExported  / dispScale).toFixed(dec) + ' ' + dispUnit + '</span>';
+    html += '<span class="sb-item sb-muted">Exported: ' + (totalExported / dispScale).toFixed(dec) + ' ' + dispUnit + '</span>';
 
     $summaryBar.html(html);
 }
