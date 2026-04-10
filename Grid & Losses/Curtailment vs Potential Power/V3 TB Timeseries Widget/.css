@@ -250,6 +250,7 @@
 .legend-line.curtail-line { border-top-style:dashed; border-top-color: #FF9800; }
 .legend-block { width:0.6em; height:0.35em; border-radius:1px; }
 .legend-block.curtailed { background-color: rgba(229,57,53,0.7); }
+.legend-block.total-loss { background-color: rgba(255,193,7,0.7); }
 
 /* ─────────────────────────────
    SETTINGS BUTTON
@@ -284,12 +285,11 @@
     border: 1px solid rgba(6,245,255,0.25);
     border-radius: 8px;
     width: 100%;
-    max-width: 520px;
-    max-height: 90vh;
+    max-width: 100%;
+    max-height: 100%;
     overflow-y: auto;
-    padding: 14px 16px 12px;
+    padding: 10px 12px 8px;
     box-sizing: border-box;
-    /* NO glow / shadow */
     color: #FFFFFF;
 }
 
@@ -336,8 +336,20 @@
 .modal-grid-2 { grid-template-columns: 1fr 1fr; }
 .modal-grid-3 { grid-template-columns: 2fr 1fr 1fr; }
 
-@media (max-width: 320px) {
+/* Collapse grids to single column on small widgets */
+@media (max-width: 420px) {
     .modal-grid-2, .modal-grid-3 { grid-template-columns: 1fr; }
+}
+/* Also collapse if the modal itself is narrow (container query fallback) */
+.settings-modal-content { container-type: inline-size; }
+@container (max-width: 380px) {
+    .modal-grid-2, .modal-grid-3 { grid-template-columns: 1fr; }
+    .modal-header { flex-direction: column; gap: 2px; }
+    .modal-title { font-size: 11px; }
+    .modal-subtitle { font-size: 8px; }
+    .setting-group label { font-size: 8px; }
+    .setting-group input, .setting-group select { font-size: 10px; padding: 4px 5px; }
+    .btn-cancel, .btn-save { font-size: 10px; padding: 5px 10px; }
 }
 
 /* Individual setting group */

@@ -361,7 +361,9 @@ function initChart() {
                     segment: { borderDash: function () { return [6, 4]; } },
                     pointRadius: 0, pointHoverRadius: 3,
                     pointHoverBackgroundColor: 'rgba(255,255,255,0.7)',
-                    tension: 0.35, fill: false, spanGaps: false, order: 4,
+                    tension: 0.35,
+                    fill: { target: 1, above: 'rgba(255,193,7,0.35)', below: 'transparent' },
+                    spanGaps: false, order: 4,
                     hidden: !shouldShowPotential()
                 },
                 /* 1 — Exported Power */
@@ -443,12 +445,21 @@ function initChart() {
                             if (!items.length) return '';
                             var cd   = items[0].chart.data;
                             var idx  = items[0].dataIndex;
+                            var potV = cd.datasets[0].data[idx];
                             var eVal = cd.datasets[1].data[idx];
                             var ceil = cd.datasets[2].data[idx];
-                            if (eVal == null || ceil == null) return '';
-                            var loss = Math.max(ceil - eVal, 0);
-                            if (loss < 0.01) return '';
-                            return '⚠ Curtailment Loss: ' + loss.toFixed(dec) + ' ' + unitLabel;
+                            var lines = [];
+                            /* Total Loss (potential - actual) — day views only */
+                            if (shouldShowPotential() && potV != null && eVal != null) {
+                                var tl = Math.max(potV - eVal, 0);
+                                if (tl >= 0.01) lines.push('⚡ Total Loss: ' + tl.toFixed(dec) + ' ' + unitLabel);
+                            }
+                            /* Curtailed Loss (ceiling - exported) */
+                            if (eVal != null && ceil != null) {
+                                var cl = Math.max(ceil - eVal, 0);
+                                if (cl >= 0.01) lines.push('⚠ Curtailed Loss: ' + cl.toFixed(dec) + ' ' + unitLabel);
+                            }
+                            return lines.length ? lines.join('\n') : '';
                         }
                     }
                 }
@@ -661,6 +672,9 @@ function processLiveTimeSeries(rawData, minTime, maxTime, bucketMs) {
     if (capUnit === 'MW' && powUnit === 'kW') capacity *= 1000;
     if (capUnit === 'kW' && powUnit === 'MW') capacity *= 0.001;
 
+    /* Scale factor for telemetry values (always reported in kW from TB) */
+    var dataScale = (powUnit === 'MW') ? 0.001 : 1;
+
     /* dynamic buckets */
     var N = Math.max(1, Math.floor((maxTime - minTime) / bucketMs));
     var labels      = [];
@@ -689,7 +703,7 @@ function processLiveTimeSeries(rawData, minTime, maxTime, bucketMs) {
         bucketHits[bi] += 1;
     }
     for (var bm = 0; bm < N; bm++) {
-        dataExported[bm] = bucketHits[bm] > 0 ? bucketSum[bm] / bucketHits[bm] : null;
+        dataExported[bm] = bucketHits[bm] > 0 ? (bucketSum[bm] / bucketHits[bm]) * dataScale : null;
     }
 
     /* ── Potential power curve (only on day views when enabled) ──────────── */
@@ -837,7 +851,21 @@ function renderChartData(labels, p, e, c, m, capacity) {
     myChart.data.datasets[1].data = e;
     myChart.data.datasets[2].data = c;
     myChart.data.datasets[3].data = m;
-    myChart.data.datasets[0].hidden = !shouldShowPotential();
+
+    var showPot = shouldShowPotential();
+    myChart.data.datasets[0].hidden = !showPot;
+
+    /* Red fill: between ceiling and potential (day) or ceiling and exported (multi-day) */
+    myChart.data.datasets[2].fill = {
+        target: showPot ? 0 : 1,
+        above: 'rgba(229,57,53,0.38)',
+        below: 'transparent'
+    };
+
+    /* Total-loss legend visibility (yellow block only meaningful when potential is shown) */
+    var $tlWrap = $el.find('.js-legend-total-loss-wrap');
+    if ($tlWrap.length) $tlWrap.css('display', showPot ? 'flex' : 'none');
+
     /* Store capacity on chart instance for the Y-axis outlier clamp plugin */
     myChart._curtCapacity = capacity || 0;
     myChart.update('none');
@@ -850,12 +878,10 @@ function updateSummary(potential, exported, ceiling, bucketMs, capacity) {
     var dec        = parseInt(s.decimals) || 1;
     var unit       = s.displayUnit || 'kW';
     var eUnit      = unit + 'h';
-    var dayView    = isDayView(s.timeframe || 'today');
     var hasPot     = shouldShowPotential();
 
-    var totalExported = 0, totalLoss = 0, curtBuckets = 0;
-    var totalPotentialEnergy = 0;   /* from sine curve — day views only */
-    var totalCapacityEnergy  = 0;   /* capacity × hours — always available */
+    var totalExported = 0, curtailedLoss = 0, totalLoss = 0, curtBuckets = 0;
+    var totalPotentialEnergy = 0;
     var activeBuckets = 0;
 
     var N = Math.max(exported.length, ceiling.length);
@@ -869,60 +895,82 @@ function updateSummary(potential, exported, ceiling, bucketMs, capacity) {
             activeBuckets++;
         }
 
+        /* Curtailed Loss: energy lost due to grid curtailment = (capacity - ceiling) per curtailed bucket */
         if (ceilV != null && expV != null) {
-            /* Curtailment active: loss = capacity - ceiling */
-            var loss = Math.max(capacity - ceilV, 0);
-            if (loss > 0) { totalLoss += loss * hPerBucket; curtBuckets++; }
+            var cLoss = Math.max(capacity - ceilV, 0);
+            if (cLoss > 0) { curtailedLoss += cLoss * hPerBucket; curtBuckets++; }
         }
 
-        /* Potential energy sum — only meaningful for day views */
+        /* Total Loss: energy lost relative to potential = (potential - actual) per bucket (day views only) */
+        if (hasPot && potV != null && expV != null) {
+            var tLoss = Math.max(potV - expV, 0);
+            totalLoss += tLoss * hPerBucket;
+        }
+
         if (hasPot && potV != null) {
             totalPotentialEnergy += potV * hPerBucket;
         }
     }
 
-    /* Capacity-energy: capacity × total active hours (always calculable) */
-    totalCapacityEnergy = capacity * activeBuckets * hPerBucket;
+    var totalCapacityEnergy = capacity * activeBuckets * hPerBucket;
+    var curtMargin    = curtailedLoss * ((parseFloat(s.theoreticalMargin) || 10) / 100);
+    var curtHours     = (curtBuckets * bucketMs / 3600000).toFixed(1);
 
-    var margin    = totalLoss * ((parseFloat(s.theoreticalMargin) || 10) / 100);
-    var curtHours = (curtBuckets * bucketMs / 3600000).toFixed(1);
-
-    /* Percentage metric depends on view type */
-    var pctLost, pctLabel;
+    /* ── Curtailed Loss % ── */
+    var curtPct, curtPctLabel;
     if (hasPot && totalPotentialEnergy > 0) {
-        /* Day view with potential curve → "% of potential" */
-        pctLost  = ((totalLoss / totalPotentialEnergy) * 100).toFixed(1);
-        pctLabel = 'of potential';
+        curtPct = ((curtailedLoss / totalPotentialEnergy) * 100).toFixed(1);
+        curtPctLabel = 'of potential';
     } else if (totalCapacityEnergy > 0) {
-        /* Multi-day view → "% of capacity" */
-        pctLost  = ((totalLoss / totalCapacityEnergy) * 100).toFixed(1);
-        pctLabel = 'of capacity';
+        curtPct = ((curtailedLoss / totalCapacityEnergy) * 100).toFixed(1);
+        curtPctLabel = 'of capacity';
     } else {
-        pctLost  = '0.0';
-        pctLabel = 'of capacity';
+        curtPct = '0.0';
+        curtPctLabel = 'of capacity';
     }
 
-    var dispScale = 1, dispUnit = eUnit;
-    if (unit === 'kW' && totalLoss > 9999)    { dispScale = 1000; dispUnit = 'MWh'; }
+    /* ── Display scaling for large numbers ── */
+    var cDispScale = 1, cDispUnit = eUnit;
+    if (unit === 'kW' && curtailedLoss > 9999) { cDispScale = 1000; cDispUnit = 'MWh'; }
+
+    var tDispScale = 1, tDispUnit = eUnit;
+    if (unit === 'kW' && totalLoss > 9999) { tDispScale = 1000; tDispUnit = 'MWh'; }
 
     var expDispScale = 1, expDispUnit = eUnit;
     if (unit === 'kW' && totalExported > 9999) { expDispScale = 1000; expDispUnit = 'MWh'; }
 
+    /* ── Build HTML ── */
     var statusStr = isLiveData ? 'Live' : 'Simulated';
     var html = '<span class="sb-item sb-label">' + statusStr + '</span>';
 
-    if (totalLoss > 0.001) {
+    /* Total Loss — only on day views where potential is available */
+    if (hasPot && totalLoss > 0.001) {
         html += '<span class="sb-sep">|</span>';
-        html += '<span class="sb-item sb-loss">⚠ Loss: <b>' +
-                (totalLoss / dispScale).toFixed(dec) + ' ' + dispUnit + '</b>' +
-                ' <span class="sb-muted">(±' + (margin / dispScale).toFixed(dec) + ')</span></span>';
+        html += '<span class="sb-item" style="color:#FFC107;">Total Loss: <b>' +
+                (totalLoss / tDispScale).toFixed(dec) + ' ' + tDispUnit + '</b></span>';
+        if (totalPotentialEnergy > 0) {
+            var totalPct = ((totalLoss / totalPotentialEnergy) * 100).toFixed(1);
+            html += '<span class="sb-sep">|</span>';
+            html += '<span class="sb-item sb-pct" style="color:#FFD54F;"><b>' + totalPct + '%</b> of potential</span>';
+        }
+    }
+
+    /* Curtailed Loss — always shown when curtailment exists */
+    if (curtailedLoss > 0.001) {
         html += '<span class="sb-sep">|</span>';
-        html += '<span class="sb-item sb-pct"><b>' + pctLost + '%</b> ' + pctLabel + '</span>';
+        html += '<span class="sb-item sb-loss">Curtailed Loss: <b>' +
+                (curtailedLoss / cDispScale).toFixed(dec) + ' ' + cDispUnit + '</b>' +
+                ' <span class="sb-muted">(±' + (curtMargin / cDispScale).toFixed(dec) + ')</span></span>';
+        html += '<span class="sb-sep">|</span>';
+        html += '<span class="sb-item sb-pct"><b>' + curtPct + '%</b> ' + curtPctLabel + '</span>';
         html += '<span class="sb-sep">|</span>';
         html += '<span class="sb-item sb-muted">' + curtHours + ' h curtailed</span>';
-    } else {
+    }
+
+    /* No losses at all */
+    if (curtailedLoss <= 0.001 && (!hasPot || totalLoss <= 0.001)) {
         html += '<span class="sb-sep">|</span>';
-        html += '<span class="sb-item sb-ok">✔ No curtailment</span>';
+        html += '<span class="sb-item sb-ok">✔ No losses detected</span>';
     }
 
     html += '<span class="sb-sep">|</span>';
