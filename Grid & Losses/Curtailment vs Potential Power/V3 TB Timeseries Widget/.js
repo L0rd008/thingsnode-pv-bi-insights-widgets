@@ -153,9 +153,9 @@ function updateDom() {
     $title.text(s.widgetTitle || 'CURTAILMENT VS POTENTIAL POWER');
     if ($yTitle.length) $yTitle.text('POWER (' + (s.displayUnit || 'kW') + ')');
 
-    /* Potential power legend visibility */
+    /* Potential power legend visibility — only on day views when enabled */
     if ($legendPotentialWrap.length) {
-        $legendPotentialWrap.css('display', s.showPotentialCurve ? 'flex' : 'none');
+        $legendPotentialWrap.css('display', shouldShowPotential() ? 'flex' : 'none');
     }
 
     /* Sync customer dropdown labels */
@@ -307,6 +307,40 @@ function initChart() {
         }
     };
 
+    /* ─── outlier-resistant Y-axis plugin ─── */
+    var yClampPlugin = {
+        id: 'yAxisOutlierClamp',
+        beforeLayout: function (chart) {
+            /* Collect all non-null values from datasets 0-2 */
+            var vals = [];
+            for (var di = 0; di <= 2 && di < chart.data.datasets.length; di++) {
+                var arr = chart.data.datasets[di].data;
+                if (!arr) continue;
+                for (var vi = 0; vi < arr.length; vi++) {
+                    if (arr[vi] != null && isFinite(arr[vi]) && arr[vi] >= 0) vals.push(arr[vi]);
+                }
+            }
+            if (vals.length < 3) return;   /* not enough data to clamp */
+
+            vals.sort(function (a, b) { return a - b; });
+            var p99Idx = Math.floor(vals.length * 0.99);
+            var p99    = vals[Math.min(p99Idx, vals.length - 1)];
+            var yCapP99 = p99 * 1.15;
+
+            /* Also cap at capacity if known */
+            var yCap = yCapP99;
+            if (chart._curtCapacity && chart._curtCapacity > 0) {
+                var capCeil = chart._curtCapacity * 1.2;
+                yCap = Math.min(yCapP99, capCeil);
+            }
+
+            /* Use suggestedMax so truly large values still render (aren't clipped) */
+            if (chart.options.scales && chart.options.scales.y) {
+                chart.options.scales.y.suggestedMax = Math.max(yCap, 1);
+            }
+        }
+    };
+
     /* Dynamic tick limit based on timeframe */
     var tf = s.timeframe || 'today';
     var xTickLimit = 12;
@@ -328,7 +362,7 @@ function initChart() {
                     pointRadius: 0, pointHoverRadius: 3,
                     pointHoverBackgroundColor: 'rgba(255,255,255,0.7)',
                     tension: 0.35, fill: false, spanGaps: false, order: 4,
-                    hidden: !s.showPotentialCurve
+                    hidden: !shouldShowPotential()
                 },
                 /* 1 — Exported Power */
                 {
@@ -420,7 +454,7 @@ function initChart() {
                 }
             }
         },
-        plugins: [labelPlugin, xhairPlugin]
+        plugins: [labelPlugin, xhairPlugin, yClampPlugin]
     });
 }
 
@@ -434,6 +468,11 @@ function parseCommaList(str) {
 
 function isDayView(tf) {
     return (tf === 'today' || tf === 'yesterday' || tf === 'day_before');
+}
+
+/* Potential curve is only physically meaningful for single-day views */
+function shouldShowPotential() {
+    return s.showPotentialCurve && isDayView(s.timeframe || 'today');
 }
 
 function getTimeBounds(tf) {
@@ -653,8 +692,8 @@ function processLiveTimeSeries(rawData, minTime, maxTime, bucketMs) {
         dataExported[bm] = bucketHits[bm] > 0 ? bucketSum[bm] / bucketHits[bm] : null;
     }
 
-    /* ── Potential power curve (optional) ───────────────────────────────── */
-    if (s.showPotentialCurve) {
+    /* ── Potential power curve (only on day views when enabled) ──────────── */
+    if (shouldShowPotential()) {
         var THRESHOLD = capacity * 0.005;
         var firstOn = -1, lastOn = -1;
         for (var fi = 0; fi < N; fi++) {
@@ -714,8 +753,8 @@ function processLiveTimeSeries(rawData, minTime, maxTime, bucketMs) {
         dataMarkers[N - 1] = dataCurtailCeil[N - 1];
     }
 
-    renderChartData(labels, dataPotential, dataExported, dataCurtailCeil, dataMarkers);
-    updateSummary(dataExported, dataCurtailCeil, bucketMs, capacity);
+    renderChartData(labels, dataPotential, dataExported, dataCurtailCeil, dataMarkers, capacity);
+    updateSummary(dataPotential, dataExported, dataCurtailCeil, bucketMs, capacity);
 }
 
 /* ────────────────────────────────────────────────────
@@ -750,7 +789,7 @@ function loadSimulation(minTime, maxTime, bucketMs) {
         }
         var frac = (hf - SUN_RISE) / (SUN_SET - SUN_RISE);
         var pot  = capacity * Math.sin(frac * Math.PI);
-        potential.push(s.showPotentialCurve ? pot : null);
+        potential.push(shouldShowPotential() ? pot : null);
 
         var curtailed = (hf >= 10.0 && hf <= 14.0);
         var cap40     = capacity * 0.40;
@@ -775,8 +814,8 @@ function loadSimulation(minTime, maxTime, bucketMs) {
         markers[N - 1] = ceiling[N - 1];
     }
 
-    renderChartData(labels, potential, exported, ceiling, markers);
-    updateSummary(exported, ceiling, bucketMs, capacity);
+    renderChartData(labels, potential, exported, ceiling, markers, capacity);
+    updateSummary(potential, exported, ceiling, bucketMs, capacity);
 }
 
 /* ────────────────────────────────────────────────────
@@ -791,48 +830,83 @@ function renderNoData() {
     }
 }
 
-function renderChartData(labels, p, e, c, m) {
+function renderChartData(labels, p, e, c, m, capacity) {
     if (!myChart) return;
     myChart.data.labels           = labels;
     myChart.data.datasets[0].data = p;
     myChart.data.datasets[1].data = e;
     myChart.data.datasets[2].data = c;
     myChart.data.datasets[3].data = m;
-    myChart.data.datasets[0].hidden = !s.showPotentialCurve;
+    myChart.data.datasets[0].hidden = !shouldShowPotential();
+    /* Store capacity on chart instance for the Y-axis outlier clamp plugin */
+    myChart._curtCapacity = capacity || 0;
     myChart.update('none');
 }
 
-function updateSummary(exported, ceiling, bucketMs, capacity) {
+function updateSummary(potential, exported, ceiling, bucketMs, capacity) {
     if (!$summaryBar || !$summaryBar.length) return;
 
     var hPerBucket = bucketMs / 3600000;
     var dec        = parseInt(s.decimals) || 1;
     var unit       = s.displayUnit || 'kW';
     var eUnit      = unit + 'h';
+    var dayView    = isDayView(s.timeframe || 'today');
+    var hasPot     = shouldShowPotential();
 
     var totalExported = 0, totalLoss = 0, curtBuckets = 0;
-    var totalPossible = 0;
+    var totalPotentialEnergy = 0;   /* from sine curve — day views only */
+    var totalCapacityEnergy  = 0;   /* capacity × hours — always available */
+    var activeBuckets = 0;
 
-    for (var i = 0; i < ceiling.length; i++) {
-        var expV  = exported[i], ceilV = ceiling[i];
-        if (expV != null) totalExported += expV * hPerBucket;
+    var N = Math.max(exported.length, ceiling.length);
+    for (var i = 0; i < N; i++) {
+        var expV  = (i < exported.length)  ? exported[i]  : null;
+        var ceilV = (i < ceiling.length)   ? ceiling[i]   : null;
+        var potV  = (potential && i < potential.length) ? potential[i] : null;
+
+        if (expV != null) {
+            totalExported += expV * hPerBucket;
+            activeBuckets++;
+        }
 
         if (ceilV != null && expV != null) {
-            /* Curtailment active: loss = capacity - ceiling (what was blocked) */
+            /* Curtailment active: loss = capacity - ceiling */
             var loss = Math.max(capacity - ceilV, 0);
             if (loss > 0) { totalLoss += loss * hPerBucket; curtBuckets++; }
-            totalPossible += capacity * hPerBucket;
-        } else if (expV != null) {
-            totalPossible += expV * hPerBucket;
+        }
+
+        /* Potential energy sum — only meaningful for day views */
+        if (hasPot && potV != null) {
+            totalPotentialEnergy += potV * hPerBucket;
         }
     }
 
+    /* Capacity-energy: capacity × total active hours (always calculable) */
+    totalCapacityEnergy = capacity * activeBuckets * hPerBucket;
+
     var margin    = totalLoss * ((parseFloat(s.theoreticalMargin) || 10) / 100);
     var curtHours = (curtBuckets * bucketMs / 3600000).toFixed(1);
-    var pctLost   = totalPossible > 0 ? ((totalLoss / totalPossible) * 100).toFixed(1) : '0.0';
+
+    /* Percentage metric depends on view type */
+    var pctLost, pctLabel;
+    if (hasPot && totalPotentialEnergy > 0) {
+        /* Day view with potential curve → "% of potential" */
+        pctLost  = ((totalLoss / totalPotentialEnergy) * 100).toFixed(1);
+        pctLabel = 'of potential';
+    } else if (totalCapacityEnergy > 0) {
+        /* Multi-day view → "% of capacity" */
+        pctLost  = ((totalLoss / totalCapacityEnergy) * 100).toFixed(1);
+        pctLabel = 'of capacity';
+    } else {
+        pctLost  = '0.0';
+        pctLabel = 'of capacity';
+    }
 
     var dispScale = 1, dispUnit = eUnit;
-    if (unit === 'kW' && totalLoss > 9999) { dispScale = 1000; dispUnit = 'MWh'; }
+    if (unit === 'kW' && totalLoss > 9999)    { dispScale = 1000; dispUnit = 'MWh'; }
+
+    var expDispScale = 1, expDispUnit = eUnit;
+    if (unit === 'kW' && totalExported > 9999) { expDispScale = 1000; expDispUnit = 'MWh'; }
 
     var statusStr = isLiveData ? 'Live' : 'Simulated';
     var html = '<span class="sb-item sb-label">' + statusStr + '</span>';
@@ -843,7 +917,7 @@ function updateSummary(exported, ceiling, bucketMs, capacity) {
                 (totalLoss / dispScale).toFixed(dec) + ' ' + dispUnit + '</b>' +
                 ' <span class="sb-muted">(±' + (margin / dispScale).toFixed(dec) + ')</span></span>';
         html += '<span class="sb-sep">|</span>';
-        html += '<span class="sb-item sb-pct"><b>' + pctLost + '%</b> of potential</span>';
+        html += '<span class="sb-item sb-pct"><b>' + pctLost + '%</b> ' + pctLabel + '</span>';
         html += '<span class="sb-sep">|</span>';
         html += '<span class="sb-item sb-muted">' + curtHours + ' h curtailed</span>';
     } else {
@@ -852,7 +926,7 @@ function updateSummary(exported, ceiling, bucketMs, capacity) {
     }
 
     html += '<span class="sb-sep">|</span>';
-    html += '<span class="sb-item sb-muted">Exported: ' + (totalExported / dispScale).toFixed(dec) + ' ' + dispUnit + '</span>';
+    html += '<span class="sb-item sb-muted">Exported: ' + (totalExported / expDispScale).toFixed(dec) + ' ' + expDispUnit + '</span>';
 
     $summaryBar.html(html);
 }
