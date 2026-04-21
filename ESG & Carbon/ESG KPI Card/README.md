@@ -10,22 +10,29 @@
 | `carbon` | `tCO2` | 500 | 100 | Auto-scale to `ktCO2` above 1000 |
 | `water` | `kL` | 200 | 50 | Auto-scale to `ML` above 1000 |
 | `waste` | `t` | 50 | 10 | Auto-scale to `kt` above 1000 |
-| `renewable` | `%` | 60 | 30 | Delta is disabled by code |
+| `renewable` | `%` | 60 | 30 | Delta disabled; progress bar shown instead |
 | `custom` | empty | none | none | Use manual settings for unit/thresholds |
 
 ## 2) Calculations performed
 1. Reads `DS[0]` as primary value.
 2. Applies divider:
    - `baseVal = DS0 / divider`
-3. Unit scaling (if `autoScale=true` and mode has scale table):
-   - Carbon: `tCO2 -> ktCO2`
-   - Water: `kL -> ML`
-   - Waste: `t -> kt`
-4. Value formatting with `decimals`.
-5. Optional delta (except renewable):
+3. Optional CO₂ conversion (carbon mode, if `co2Factor` is set):
+   - `baseVal = baseVal * co2Factor`  ← treats `baseVal` as energy in kWh, output is tCO₂.
+   - Leave `co2Factor` empty if the device already sends pre-computed CO₂.
+4. Unit scaling (if `autoScale=true` and mode has scale table):
+   - Carbon: `tCO₂ → ktCO₂` above 1000 tCO₂
+   - Water:  `kL → ML` above 1000 kL
+   - Waste:  `t → kt` above 1000 t
+   - **Unit override** (`unit` setting) freezes the displayed *label* only — the numeric
+     divisor from the scale step is still applied. Set `unit='tCO₂'` and send kgCO₂
+     (device side) to rely on the ÷1000 divisor as a kgCO₂→tCO₂ converter — **but
+     the preferred approach is to use `co2Factor` or `divider=1000` instead.**
+5. Value formatting with `decimals`.
+6. Optional delta (except renewable):
    - Requires `DS[1]` target.
    - Computes `%` difference vs target and shows arrow.
-6. Optional status badge:
+7. Optional status badge:
    - Uses `thresholdWarning` / `thresholdCritical` from settings if set,
    - otherwise mode defaults above.
    - `thresholdInvert` flips logic when lower values are better.
@@ -48,13 +55,25 @@ Per mode telemetry expectation:
 ## 4) Units (input vs output)
 - Input unit is user-defined by telemetry + `divider` choice.
 - Output unit:
-  - mode default or `unit` override
-  - may auto-scale to larger unit
+  - mode default, or `unit` override (label only — scale divisor still applies)
+  - auto-scales to larger unit only when `autoScale` is on
 - Delta output is always `%`.
 
-Implementation note:
-- Delta is calculated using scaled display values, not raw base values.
-- If target and actual can fall into different scale buckets, keep `autoScale` off for more reliable delta math.
+Unit configuration guide:
+| Device sends | Want to display | Recommended approach |
+|---|---|---|
+| kgCO₂ | tCO₂ | `divider=1000` (or send energy + set `co2Factor`) |
+| MWh | tCO₂ | `divider=0.001` (MWh→kWh) + `co2Factor=0.001` |
+| kWh energy | tCO₂ | `co2Factor=<grid factor in tCO₂/kWh>` |
+| pre-computed tCO₂ | tCO₂ | no divider, no co2Factor needed |
+
+Implementation note — unit override and autoScale:
+- When `unit` is set, the displayed label is frozen at that value across all scale steps.
+- The numeric divisor from `autoScale` is still applied. This means unit='tCO₂' with
+  kgCO₂ input will appear to show correct tCO₂ (÷1000 coincides), but this is fragile.
+  Use `divider=1000` or `co2Factor` for explicit, self-documenting configuration.
+- Delta is calculated on raw `baseVal` / `targetBase` (both post-divider, post-co2Factor),
+  so `autoScale` can safely be left `on` for cross-scale comparisons.
 
 ## 5) ThingsBoard setup checklist
 1. Add widget as `Latest values`.

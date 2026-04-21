@@ -140,13 +140,13 @@ self.onDataUpdated = function () {
     $barVal.text(formatScaled(lifetimePotential) + ' ' + currency);
 
     // 8. Progress bar logic
-    var progressPct = 0;
-    if (lifetimePotential > 0) {
-        progressPct = (annualRevenue / lifetimePotential) * 100;
+    // Represents: what fraction of the lifetime projection budget is consumed by one annual period?
+    // = annualFactor / lifetimeFactor (both are multipliers on the same base, so baseVal cancels out).
+    // BUG-1 FIX: removed the arbitrary ×10 fudge that only matched the factory-default settings.
+    var visualPct = 0;
+    if (lifetimeFactor > 0) {
+        visualPct = (annualFactor / lifetimeFactor) * 100;
     }
-
-    // Visual boost — raw annual/lifetime ratio is typically very small
-    var visualPct = progressPct * 10;
     if (visualPct > 100) visualPct = 100;
     if (visualPct < 3) visualPct = 3;
 

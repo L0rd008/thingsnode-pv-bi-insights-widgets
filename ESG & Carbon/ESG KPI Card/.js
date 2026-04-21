@@ -162,24 +162,37 @@ self.onDataUpdated = function () {
     var divider = s.divider || 1;
     var baseVal = val / divider;
 
-    // 4. Auto-scale (clean, single implementation)
+    // 3b. Optional in-widget CO2 conversion for carbon mode.
+    //     If co2Factor is configured, treat baseVal as energy (post-divider) and
+    //     convert to tCO2 here.  This eliminates the need for device-side CO2
+    //     computation and ensures all time-period widgets use the same factor.
+    //     Leave co2Factor empty to use raw telemetry as-is (legacy: device sends tCO2).
+    var co2Factor = parseFloat(s.co2Factor);
+    if (mode === 'carbon' && !isNaN(co2Factor) && co2Factor > 0) {
+        baseVal = baseVal * co2Factor;
+    }
+
+    // 4. Auto-scale.
+    //     BUG-10 NOTE (reverted): the unit override freezes the LABEL only.
+    //     The numeric divisor is still applied so that scale steps remain effective.
+    //     Rationale: devices commonly send kgCO2; the autoScale divisor (×1000)
+    //     coincidentally converts kgCO2→tCO2 when unit='tCO2' is forced.
+    //     Skipping the divisor (BUG-10 attempt) caused a 1000x display inflation.
     var autoScale = (s.autoScale !== false);
     var displayUnit = s.unit || cfg.unit;
-    var displayVal = baseVal;
+    var displayVal  = baseVal;
 
-    var hasUnitOverride = (s.unit && s.unit.trim() !== "");
-    
+    var hasUnitOverride = (s.unit && s.unit.trim() !== '');
+
     if (autoScale && cfg.scaleSteps) {
         for (var i = 0; i < cfg.scaleSteps.length; i++) {
             var step = cfg.scaleSteps[i];
             if (Math.abs(baseVal) >= step.threshold) {
                 displayVal = baseVal / step.divisor;
-    
-                // Only override unit if user has NOT forced one
+                // Only update the unit label when no explicit override is set.
                 if (!hasUnitOverride) {
                     displayUnit = step.unit;
                 }
-    
                 break;
             }
         }
@@ -197,6 +210,14 @@ self.onDataUpdated = function () {
 
     displayUnit = displayUnit.replace(/CO2|CO₂/g, 'CO<sub>2</sub>');
     $unitEl.html(displayUnit);
+
+    // BUG-4 FIX: Populate renewable progress bar from live data.
+    // The bar was shown in the DOM for renewable mode but never driven by onDataUpdated.
+    if (mode === 'renewable') {
+        var fillPct = Math.max(0, Math.min(100, baseVal));
+        $el.find('.js-progress-fill').css('width', fillPct + '%');
+        $el.find('.js-progress-label').text(baseVal.toFixed(decimals) + '%');
+    }
 
     // 7. Delta vs target
     var $delta = $el.find('.js-delta');
@@ -216,6 +237,9 @@ self.onDataUpdated = function () {
                 var targetBase = parseFloat(targetRaw) / divider;
                 var targetDisplayVal = targetBase;
 
+                // BUG-3 FIX: Delta must be computed on the raw (pre-scale) values.
+                // Using display-scaled values caused a units mismatch when main and target
+                // crossed different scale thresholds (e.g. 1.5 ktCO₂ vs 800 tCO₂ → diff = -798.5).
                 if (autoScale && cfg.scaleSteps) {
                     for (var j = 0; j < cfg.scaleSteps.length; j++) {
                         var tStep = cfg.scaleSteps[j];
@@ -226,10 +250,10 @@ self.onDataUpdated = function () {
                     }
                 }
 
-                if (targetDisplayVal > 0) {
+                if (targetBase > 0) {
 
-                    var diff = displayVal - targetDisplayVal;
-                    var pct = (diff / targetDisplayVal) * 100;
+                    var diff = baseVal - targetBase;
+                    var pct = (diff / targetBase) * 100;
 
                     $el.find('.js-delta-value').text(Math.abs(pct).toFixed(1) + '%');
 
@@ -307,4 +331,35 @@ self.onDataUpdated = function () {
     if (self.ctx.detectChanges) {
         self.ctx.detectChanges();
     }
+};
+
+// --------------------------------------------------
+//  Responsive font scaling
+//  BUG-5/9 FIX: onResize was called in onInit but never defined,
+//  causing a hard TypeError crash on every widget render.
+// --------------------------------------------------
+self.onResize = function () {
+    var $el = self.ctx.$widget;
+    var $card = $el.find('.esg-card');
+    var h = $el.height();
+    var w = $el.width();
+
+    // Em budget:
+    //   header(0.7) + value(2.0) + unit(0.6) + sub-content(0.65) +
+    //   footer(0.5) + gaps(1.05) + padding(1.0) ≈ 8.5em
+    var fromHeight = (h - 8) / 8.5;
+
+    // Width: value + unit + padding ≈ 9em minimum
+    var fromWidth = w / 10;
+
+    var fontSize = Math.min(fromHeight, fromWidth);
+
+    // Clamp
+    if (fontSize < 8) fontSize = 8;
+    if (fontSize > 32) fontSize = 32;
+
+    $card.css('font-size', fontSize + 'px');
+};
+
+self.onDestroy = function () {
 };

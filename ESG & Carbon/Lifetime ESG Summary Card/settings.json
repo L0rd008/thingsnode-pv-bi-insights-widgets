@@ -31,14 +31,14 @@
         "name": "CO₂ Factor (tCO₂ per kWh)",
         "type": "number",
         "default": 0.0007,
-        "helpText": "Multiply raw energy (kWh) by this to get tCO₂ avoided."
+        "helpText": "Multiply raw energy (kWh) by this to get tCO₂ avoided. Default 0.0007 = Sri Lanka grid (0.7 kgCO₂/kWh). Use 0.000233 for EU avg, 0.000386 for US avg, 0.000436 for IEA world avg."
     },
     {
         "id": "homeFactor",
-        "name": "Home Equivalent Divider",
+        "name": "Home Equivalent Divider (kWh/home/year)",
         "type": "number",
         "default": 1330,
-        "helpText": "Divide energy (kWh) by this to get equivalent homes powered."
+        "helpText": "Annual kWh consumed by one average household. Divide lifetime energy by this to get equivalent homes powered. Default 1330 = Sri Lanka avg household. Use 10500 for US avg, 3100 for EU avg, 4500 for UK avg."
     },
     {
         "id": "divider",

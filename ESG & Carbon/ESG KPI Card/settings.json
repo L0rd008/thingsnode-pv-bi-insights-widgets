@@ -48,7 +48,13 @@
     "name": "Input Value Divider",
     "type": "number",
     "default": 1,
-    "helpText": "Divide raw telemetry value by this number before display."
+    "helpText": "Divide raw telemetry value by this number before display. Use 1000 to convert Wh→kWh, or 0.001 to convert MWh→kWh."
+  },
+  {
+    "id": "co2Factor",
+    "name": "CO₂ Emission Factor (carbon mode only, optional)",
+    "type": "number",
+    "helpText": "If set, the widget treats incoming data as ENERGY (post-divider, in kWh) and multiplies by this factor to compute CO₂ (in tCO₂/kWh). E.g. 0.001 = 1.0 kgCO₂/kWh, 0.000585 = CEB Sri Lanka 2021. Leave empty if the device already sends pre-computed CO₂ values."
   },
   {
     "id": "decimals",

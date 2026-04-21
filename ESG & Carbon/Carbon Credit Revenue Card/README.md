@@ -16,9 +16,10 @@ Given `raw = DS[0]`:
 3. Lifetime estimate:
    - `lifetimePotential = baseVal * lifetimeFactor`
 4. Format values with optional K/M/B auto-scaling.
-5. Progress bar:
-   - `progressPct = annualRevenue / lifetimePotential * 100`
-   - then visual scaling: `visualPct = clamp(progressPct * 10, 3, 100)`
+5. Progress bar fill:
+   - Represents how much of the lifetime budget one annual period consumes.
+   - `visualPct = clamp((annualFactor / lifetimeFactor) * 100, 3, 100)`
+   - This is purely settings-driven (the raw telemetry value cancels out of the ratio).
 
 ## 2) Optional comparison and status
 - Delta mode (`showDelta=true`):
