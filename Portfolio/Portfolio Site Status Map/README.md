@@ -266,6 +266,26 @@ The widget separates telemetry fetch failures from rendering errors. If the tele
 
 Calls to `self.ctx.detectChanges()` are wrapped in try-catch. If Angular change detection fails, a non-fatal warning is logged but the rendered map state is not cleared.
 
+### Tree-walk pruning at plant level
+
+The tree walker stops descending as soon as it encounters a `isPlant=true` entity. Because plants never contain other plants in the hierarchy (only aggregation nodes contain plants), continuing below a plant would traverse blocks, inverters, weather stations, and other sub-plant devices — each requiring 2–3 API calls for entity resolution and role detection — without finding any additional plants.
+
+This pruning reduces the total number of API calls from several hundred to roughly the count of plants plus aggregation containers, which typically completes in under two seconds for the full portfolio.
+
+### Parallel role-flag resolution
+
+Role flags (`isPlant`, `isPlantAgg`) are resolved by fetching `SERVER_SCOPE` and `SHARED_SCOPE` attributes in parallel. `SERVER_SCOPE` values take precedence when both scopes contain a flag.
+
+### Render timing
+
+When `debugMode=true`, the `render_summary` log includes a `timing` object with:
+
+| Field | Description |
+|---|---|
+| `treeResolutionMs` | Time from render start to beginning of telemetry fetch (tree walk + entity resolution) |
+| `telemetryFetchMs` | Time spent fetching telemetry / attributes for all resolved plants |
+| `totalMs` | End-to-end time from render start to marker rendering |
+
 ---
 
 ## Notes

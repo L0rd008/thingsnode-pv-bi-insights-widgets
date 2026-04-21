@@ -305,26 +305,14 @@ function fetchScopedEntityAttributes(entityRef, scope, keys, token, renderToken,
 }
 
 function resolveEntityRoleFlags(entityRef, token, renderToken, context) {
-    return fetchScopedEntityAttributes(entityRef, 'SERVER_SCOPE', ENTITY_ROLE_KEYS, token, renderToken, context).then(function (serverAttrs) {
-        var missingPlant = !hasAttributeValue(serverAttrs, 'isPlant');
-        var missingPlantAgg = !hasAttributeValue(serverAttrs, 'isPlantAgg');
-
-        if (!missingPlant && !missingPlantAgg) {
-            return {
-                serverAttrs: serverAttrs,
-                sharedAttrs: {}
-            };
-        }
-
-        return fetchScopedEntityAttributes(entityRef, 'SHARED_SCOPE', ENTITY_ROLE_KEYS, token, renderToken, context).then(function (sharedAttrs) {
-            return {
-                serverAttrs: serverAttrs,
-                sharedAttrs: sharedAttrs
-            };
-        });
-    }).then(function (result) {
-        var serverAttrs = result.serverAttrs || {};
-        var sharedAttrs = result.sharedAttrs || {};
+    // Fetch both scopes in parallel to eliminate sequential round-trips.
+    // SERVER_SCOPE values take precedence; SHARED_SCOPE fills gaps.
+    return Promise.all([
+        fetchScopedEntityAttributes(entityRef, 'SERVER_SCOPE', ENTITY_ROLE_KEYS, token, renderToken, context),
+        fetchScopedEntityAttributes(entityRef, 'SHARED_SCOPE', ENTITY_ROLE_KEYS, token, renderToken, context)
+    ]).then(function (results) {
+        var serverAttrs = results[0] || {};
+        var sharedAttrs = results[1] || {};
         var hasPlant = hasAttributeValue(serverAttrs, 'isPlant') || hasAttributeValue(sharedAttrs, 'isPlant');
         var hasPlantAgg = hasAttributeValue(serverAttrs, 'isPlantAgg') || hasAttributeValue(sharedAttrs, 'isPlantAgg');
         var rawPlant = hasAttributeValue(serverAttrs, 'isPlant')
@@ -1007,7 +995,7 @@ function tryRenderPlantSubtree(plantEntity, authToken, renderToken, context) {
 
     return fetchPlantTree(plantRef, authToken, renderToken, {
         includeRootPlant: true,
-        descendIntoPlantChildren: true
+        descendIntoPlantChildren: false
     }).then(function (plants) {
         if (renderToken !== self._pendingRender) { return false; }
 
@@ -1088,7 +1076,7 @@ function tryRenderBranchRoot(branchRootRef, authToken, renderToken) {
         if (isPlantEntity(branchRootEntity)) {
             return fetchPlantTree(getEntityRef(branchRootEntity, branchRootRef.entityType), authToken, renderToken, {
                 includeRootPlant: true,
-                descendIntoPlantChildren: true
+                descendIntoPlantChildren: false
             }).then(function (plants) {
                 var branchRootKind = plants && plants.length > 1 ? 'plant_subtree' : 'plant_leaf';
 
@@ -1118,7 +1106,7 @@ function tryRenderBranchRoot(branchRootRef, authToken, renderToken) {
 
         return fetchPlantTree(getEntityRef(branchRootEntity, branchRootRef.entityType), authToken, renderToken, {
             includeRootPlant: false,
-            descendIntoPlantChildren: true
+            descendIntoPlantChildren: false
         }).then(function (plants) {
             if (renderToken !== self._pendingRender) { return false; }
             debugLog(renderToken, 'branch_root_descendants', {
@@ -1426,6 +1414,7 @@ self.onDataUpdated = function () {
 // ============================================================
 function resolveRenderRoot(selectedEntityRef, selectedProfile, selectedBranchRootRef, renderToken) {
     var authToken = getAuthToken();
+    renderToken._t0 = typeof performance !== 'undefined' ? performance.now() : Date.now();
 
     setLoadingState(true);
 
@@ -1476,7 +1465,7 @@ function continueResolveRenderRoot(asset, selectedEntityRef, selectedProfile, au
 
     return fetchPlantTree(selectedResolvedRef, authToken, renderToken, {
         includeRootPlant: false,
-        descendIntoPlantChildren: true
+        descendIntoPlantChildren: false
     }).then(function (plants) {
         if (renderToken !== self._pendingRender) { return; }
 
@@ -1550,7 +1539,7 @@ function fetchAndRender(rootEntityRef, authToken, renderToken, renderMeta) {
 
     fetchPlantTree(rootEntityRef, authToken, renderToken, {
         includeRootPlant: false,
-        descendIntoPlantChildren: true
+        descendIntoPlantChildren: false
     }).then(function (plants) {
         if (renderToken !== self._pendingRender) { return; }
         renderPlantAssets(plants, authToken, renderToken, renderMeta);
@@ -1584,16 +1573,32 @@ function renderPlantAssets(assets, authToken, renderToken, renderMeta) {
 
     assets = uniqueEntities(assets);
 
+    var treeElapsed = 0;
+    if (renderToken._t0) {
+        treeElapsed = (typeof performance !== 'undefined' ? performance.now() : Date.now()) - renderToken._t0;
+    }
+    renderToken._tTelStart = typeof performance !== 'undefined' ? performance.now() : Date.now();
+
     debugLog(renderToken, 'telemetry_fetch_start', {
         branchRootKind: renderMeta.branchRootKind || '',
         branchRoot: summarizeEntity(renderMeta.branchRoot),
         telemetryFetchCount: assets.length,
-        assets: summarizeEntities(assets)
+        assets: summarizeEntities(assets),
+        treeResolutionMs: Math.round(treeElapsed)
     });
 
     fetchTelemetryForAssets(assets, authToken, renderToken).then(function (results) {
         if (renderToken !== self._pendingRender) { return; }
         setLoadingState(false);
+
+        var telElapsed = 0;
+        if (renderToken._tTelStart) {
+            telElapsed = (typeof performance !== 'undefined' ? performance.now() : Date.now()) - renderToken._tTelStart;
+        }
+        var totalElapsed = 0;
+        if (renderToken._t0) {
+            totalElapsed = (typeof performance !== 'undefined' ? performance.now() : Date.now()) - renderToken._t0;
+        }
 
         var configuredStrictDuckTyping = isStrictDuckTypingEnabled();
         var sites = [];
@@ -1624,7 +1629,12 @@ function renderPlantAssets(assets, authToken, renderToken, renderMeta) {
             renderedWithoutCapacity: renderedWithoutCapacity,
             droppedMissingLocation: droppedMissingLocation,
             droppedMissingCapacity: droppedMissingCapacity,
-            plantIds: sites.map(function (site) { return shortId(site.entityId); })
+            plantIds: sites.map(function (site) { return shortId(site.entityId); }),
+            timing: {
+                treeResolutionMs: Math.round(treeElapsed),
+                telemetryFetchMs: Math.round(telElapsed),
+                totalMs: Math.round(totalElapsed)
+            }
         });
 
         if (sites.length === 0) {
