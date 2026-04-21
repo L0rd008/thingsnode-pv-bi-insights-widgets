@@ -1,0 +1,60 @@
+<div class="curt-card">
+
+    <!-- ═══ HEADER ═══ -->
+    <div class="card-header">
+        <div class="card-title js-title">CURTAILMENT VS POTENTIAL POWER</div>
+        <div class="header-status">
+            <span class="status-dot js-status-dot"></span>
+            <span class="status-text js-status-text">--</span>
+        </div>
+    </div>
+
+    <!-- ═══ DATE NAV + INTERVAL ═══ -->
+    <div class="date-nav">
+        <button class="date-btn js-date-prev" title="Previous day">&#9664;</button>
+        <span class="date-label js-date-label" title="Click to pick date">Today</span>
+        <input type="date" class="date-picker-hidden js-date-picker" />
+        <button class="date-btn js-date-next" title="Next day">&#9654;</button>
+        <span class="nav-sep">|</span>
+        <select class="interval-select js-interval" title="Bucket interval">
+            <option value="1">1 min</option>
+            <option value="5" selected>5 min</option>
+            <option value="10">10 min</option>
+            <option value="15">15 min</option>
+        </select>
+    </div>
+
+    <!-- ═══ BODY — Chart.js Canvas ═══ -->
+    <div class="chart-body">
+        <div class="y-axis-title js-y-title">POWER (kW)</div>
+        <div class="chart-container">
+            <canvas class="js-canvas"></canvas>
+        </div>
+    </div>
+
+    <!-- ═══ FOOTER — Legend ═══ -->
+    <div class="card-footer">
+        <div class="legend-item">
+            <div class="legend-line dashed potential"></div>
+            <span class="legend-label js-legend-potential">Potential Power</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-line solid"></div>
+            <span class="legend-label js-legend-exported">Exported Power</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-line dashed setpoint"></div>
+            <span class="legend-label js-legend-setpoint">Setpoint Limit</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-block curtailed"></div>
+            <span class="legend-label js-legend-curtailed">Curtailed Energy</span>
+        </div>
+    </div>
+
+    <!-- ═══ TOOLTIP — Glassmorphism ═══ -->
+    <div class="tooltip-container">
+        <div class="tooltip-content js-tooltip"></div>
+    </div>
+
+</div>

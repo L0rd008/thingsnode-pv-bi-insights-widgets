@@ -1,0 +1,144 @@
+[
+  {
+    "id": "widgetTitle",
+    "name": "Widget Title",
+    "type": "text",
+    "default": "CURTAILMENT VS POTENTIAL POWER",
+    "helpText": "Header title for the widget."
+  },
+  {
+    "id": "unitLabel",
+    "name": "Power Unit",
+    "type": "text",
+    "default": "kW",
+    "helpText": "Unit displayed on the Y-axis and in tooltips (e.g. kW, MW)."
+  },
+  {
+    "id": "potentialLineLabel",
+    "name": "Potential Power Label",
+    "type": "text",
+    "default": "Potential Power",
+    "helpText": "Legend label for the theoretical potential power curve."
+  },
+  {
+    "id": "exportedAreaLabel",
+    "name": "Exported Power Label",
+    "type": "text",
+    "default": "Exported Power",
+    "helpText": "Legend label for the actual exported power area."
+  },
+  {
+    "id": "curtailmentLabel",
+    "name": "Curtailment Label",
+    "type": "text",
+    "default": "Curtailed Energy",
+    "helpText": "Label shown inside the curtailment (red) zone on the chart."
+  },
+  {
+    "id": "actualPowerKeys",
+    "name": "Actual Power Telemetry Keys",
+    "type": "text",
+    "default": "active_power",
+    "helpText": "Comma-separated time-series telemetry keys for real exported power. Evaluated in order for fallback."
+  },
+  {
+    "id": "setpointKeys",
+    "name": "Setpoint Telemetry Keys",
+    "type": "text",
+    "default": "setpoint_active_power, curtailment_limit, power_limit",
+    "helpText": "Comma-separated telemetry keys representing the maximum allowed percentage (%) of plant capacity. Evaluated in order."
+  },
+  {
+    "id": "plantCapacityKey",
+    "name": "Plant Capacity Attribute",
+    "type": "text",
+    "default": "Plant Total Capacity",
+    "helpText": "Server attribute key for the plant's total capacity."
+  },
+  {
+    "id": "capacityUnit",
+    "name": "Capacity Attribute Unit",
+    "type": "text",
+    "default": "MW",
+    "helpText": "Unit of the capacity attribute (MW or kW). Will be converted to the widget's Power Unit if necessary."
+  },
+  {
+    "id": "theoreticalMargin",
+    "name": "Error Margin (%)",
+    "type": "number",
+    "default": 10,
+    "helpText": "Percentage margin of error for the theoretical potential calculation."
+  },
+  {
+    "id": "potentialProfileKey",
+    "name": "Potential Profile Attribute Key",
+    "type": "text",
+    "default": "potential_power_profile",
+    "helpText": "Server attribute key containing a JSON array of 96 values (15-min intervals) representing potential power in the configured unit."
+  },
+  {
+    "id": "maxPower",
+    "name": "Max Plant Power (Simulation)",
+    "type": "number",
+    "default": 1000,
+    "helpText": "Peak nameplate power of the plant in the configured unit. Used for simulation bell-curve generation."
+  },
+  {
+    "id": "exportLimitKw",
+    "name": "Grid Export Limit (Simulation)",
+    "type": "number",
+    "default": 800,
+    "helpText": "Grid-imposed export ceiling in the configured unit. Creates the flat-top curtailment pattern in simulation mode."
+  },
+  {
+    "id": "sunriseHour",
+    "name": "Sunrise Hour (Simulation)",
+    "type": "number",
+    "default": 6,
+    "helpText": "Hour when solar generation begins (0–24). Default 6 = 06:00."
+  },
+  {
+    "id": "sunsetHour",
+    "name": "Sunset Hour (Simulation)",
+    "type": "number",
+    "default": 18,
+    "helpText": "Hour when solar generation ends (0–24). Default 18 = 18:00."
+  },
+  {
+    "id": "decimals",
+    "name": "Decimal Places",
+    "type": "number",
+    "default": 1,
+    "helpText": "Number of decimal places for values in tooltips and labels."
+  },
+  {
+    "id": "showCurtailmentLabel",
+    "name": "Show Curtailment Label on Chart",
+    "type": "switch",
+    "default": true,
+    "helpText": "Toggle the 'Curtailed Energy' text overlay inside the red zone on the chart."
+  },
+  {
+    "id": "accentColor",
+    "name": "Accent Color",
+    "type": "text",
+    "helpText": "Override the card border glow accent (CSS color, e.g. #06F5FF). Leave blank for default cyan."
+  },
+  {
+    "id": "tooltipText",
+    "name": "Tooltip Text",
+    "type": "text",
+    "helpText": "Static tooltip override. Leave blank for auto-generated dynamic tooltip with curtailment summary."
+  },
+  {
+    "id": "setpointLineLabel",
+    "name": "Setpoint Line Label",
+    "type": "text"
+  },
+  {
+    "id": "smoothLines",
+    "name": "Smooth Lines",
+    "type": "switch",
+    "default": false
+  }
+]

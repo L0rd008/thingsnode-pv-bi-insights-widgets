@@ -1,0 +1,9 @@
+[
+    {
+        "id": "dummyField",
+        "name": "Dummy Field",
+        "type": "text",
+        "default": "",
+        "helpText": "V5 uses an inline settings modal (gear icon, Tenant Admin only). Configure data keys, capacity, and display options from within the widget."
+    }
+]
