@@ -1,4 +1,4 @@
-# IDE / editor
+# Editors and IDE state
 .cursor/
 .vscode/
 .idea/
@@ -7,24 +7,37 @@
 # OS metadata
 .DS_Store
 Thumbs.db
+desktop.ini
 
-# Python cache / virtual environments
+# Python cache and virtualenvs
 __pycache__/
 *.py[cod]
 .venv/
 venv/
 
-# Generated artifacts
+# Generated exports and logs
 All Widgets.txt
+diff.txt
+diff*.txt
+log.txt
+*.log
 
-docs
+# Local docs and private context
 docs/
-/docs
-/docs/
-# Confidential local context / credentials (do not publish)
 Context/
 Finance_Dummy.txt
 Degradation Adjusted Yield Index/.py
 
-# Potentially sensitive screenshots
+# Local utility scratch space and demo data
+test_v2_hierarchy/
+**/demo_device_*.csv
+Financials/demo_device_financials.csv
+Grid & Losses/demo_device_grid.csv
+Portfolio/demo_device_portfolio.csv
+**/generate_*.csv
+**/mapping_guide_*.md
+
+# Local test harnesses and screenshots
+ESG & Carbon/ESG_Widget_Tests.html
+ESG & Carbon/ESG_Widget_Tests_v3.js
 **/Screenshot *.png
