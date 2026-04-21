@@ -53,6 +53,7 @@ Do not confuse this with V4, which is a Latest Values widget.
 - Clicking the date label opens the custom calendar popup.
 - Future dates cannot be selected.
 - Calendar days with daylight curtailment events are highlighted in amber.
+- The calendar popup is rendered outside the clipped widget card, so short widgets do not crop it; if vertical space is tight, the popup scrolls internally.
 
 ## 4) Dataset Layout
 | # | Name | Visual | Notes |
@@ -60,14 +61,16 @@ Do not confuse this with V4, which is a Latest Values widget.
 | 0 | Potential Power | White dashed line | Day views only, optional display |
 | 1 | Exported Power | Cyan solid line | Always shown |
 | 2 | Curtailment Limit | Orange dashed line | Drawn when setpoint < 99.5% |
-| 3 | Curtailment Loss Fill | Internal fill dataset | Fills red between potential and ceiling |
-| 4 | Curtailment Markers | Orange dots | Start and end of curtailment events |
-| 5 | Setpoint Limit | Amber dashed stepped line | Holds the current setpoint-derived limit |
+| 3 | Total Loss Fill | Internal fill dataset | Fills amber between exported and the modeled upper bound for non-curtailed loss |
+| 4 | Curtailment Loss Fill | Internal fill dataset | Fills red between potential and curtailment ceiling |
+| 5 | Curtailment Markers | Orange dots | Start and end of curtailment events |
+| 6 | Setpoint Limit | Amber dashed stepped line | Holds the current setpoint-derived limit |
 
 ## 5) Calculations
 - `Curtailment Ceiling = Capacity * (Setpoint% / 100)` when setpoint < 99.5%.
 - `Total Loss per bucket = max(Potential - Exported, 0) * bucketHours`.
 - `Curtailed Loss per bucket = max(Potential - Curtailment Ceiling, 0) * bucketHours`.
+- During curtailed intervals, the visual fills are split into two non-overlapping regions: amber for `Exported -> Ceiling` and red for `Ceiling -> Potential`.
 - Actual power is allowed to exceed the modeled potential curve. Losses are clamped at zero instead of forcing the model upward.
 - Setpoint uses step-hold interpolation with a 30-day lookback before `startTs`.
 - If measured export exceeds configured capacity, the widget auto-scales capacity upward to avoid chart clipping.
