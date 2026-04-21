@@ -62,13 +62,25 @@
    ───────────────────────────── */
 .card-header {
     flex: 0 0 auto;
-    display: flex;
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
     align-items: center;
-    justify-content: space-between;
     z-index: 2;
     line-height: 1.1;
     margin-bottom: 0.1em;
 }
+/* Left zone: gear + status badge */
+.header-left {
+    display: flex;
+    align-items: center;
+    gap: 0.25em;
+    justify-content: flex-start;
+}
+/* Right zone: invisible balancer so title stays centred */
+.header-right {
+    justify-self: end;
+}
+
 .card-title {
     font-size: 1.1em;
     font-weight: 700;
@@ -78,7 +90,6 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    flex: 1;
     text-align: center;
 }
 .header-status {
@@ -86,7 +97,6 @@
     align-items: center;
     gap: 0.18em;
     flex-shrink: 0;
-    padding-left: 0.3em;
 }
 .status-dot {
     width:0.35em; height:0.35em;
@@ -458,7 +468,6 @@
     cursor: pointer; opacity: 0.7;
     transition: opacity 0.2s, transform 0.2s;
     font-size: 0.8em; flex-shrink: 0;
-    margin-right: 0.3em;
     user-select: none;
 }
 .settings-btn:hover { opacity: 1; transform: rotate(45deg); }
