@@ -1,0 +1,650 @@
+/* Dark Mode Hierarchy Widget - CSS tab */
+
+/*
+   Theme direction:
+   - Deep blue panel background
+   - Cyan accents and glow
+   - High-contrast text for control-room dashboards
+*/
+
+/* 1) Widget frame */
+tb-entities-hierarchy-widget {
+    --hw-bg-main: #020b3a;
+    --hw-bg-card: rgba(3, 16, 74, 0.96);
+    --hw-bg-surface: #071451;
+    --hw-bg-hover: rgba(44, 129, 255, 0.14);
+    --hw-bg-selected: rgba(34, 220, 255, 0.18);
+    --hw-bg-highlight: rgba(42, 196, 255, 0.18);
+
+    --hw-border-soft: rgba(72, 158, 255, 0.42);
+    --hw-border-strong: rgba(66, 220, 255, 0.72);
+
+    --hw-text-main: #dff7ff;
+    --hw-text-muted: #8db9df;
+    --hw-text-dim: #5f86b7;
+
+    --hw-accent: #24e9ff;
+    --hw-accent-strong: #00c7ff;
+    --hw-warning: #ffc857;
+
+    display: flex !important;
+    flex-direction: column !important;
+    position: relative !important;
+    width: 100% !important;
+    height: 100% !important;
+    overflow: hidden !important;
+    font-family: 'Rajdhani', 'Segoe UI', Tahoma, sans-serif !important;
+    background:
+        radial-gradient(circle at 8% -6%, rgba(48, 161, 255, 0.22), transparent 42%),
+        radial-gradient(circle at 92% 0%, rgba(32, 238, 255, 0.16), transparent 45%),
+        linear-gradient(180deg, #05124b 0%, #020a34 62%, #010624 100%) !important;
+    border: 1px solid var(--hw-border-soft) !important;
+    border-radius: 10px !important;
+    box-shadow: 0 0 0 1px rgba(17, 88, 156, 0.28), 0 12px 32px rgba(0, 0, 0, 0.32) !important;
+}
+
+tb-entities-hierarchy-widget > * {
+    position: relative !important;
+}
+
+/* 2) Injected panel */
+.hw-panel {
+    flex-shrink: 0;
+    z-index: 10;
+    background: linear-gradient(180deg, rgba(6, 22, 94, 0.94), rgba(4, 16, 72, 0.88));
+    position: relative;
+    overflow: visible;
+    border-bottom: 1px solid var(--hw-border-soft);
+    box-shadow: inset 0 -1px 0 rgba(0, 191, 255, 0.12);
+}
+
+.hw-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 13px 16px 10px;
+}
+
+.hw-header-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    filter: drop-shadow(0 0 5px rgba(36, 233, 255, 0.55));
+}
+
+.hw-header-title {
+    font-size: 20px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--hw-accent);
+    text-shadow: 0 0 12px rgba(36, 233, 255, 0.3);
+}
+
+.hw-search-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 16px 12px;
+    position: relative;
+}
+
+.hw-search-input-wrap {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    border: 1px solid var(--hw-border-soft);
+    border-radius: 8px;
+    padding: 8px 10px;
+    background: rgba(6, 20, 80, 0.85);
+    box-shadow: inset 0 0 0 1px rgba(16, 75, 130, 0.35);
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.hw-search-input-wrap:focus-within {
+    border-color: var(--hw-border-strong);
+    box-shadow: 0 0 0 2px rgba(22, 220, 255, 0.18), inset 0 0 0 1px rgba(22, 220, 255, 0.32);
+}
+
+.hw-search-icon {
+    flex-shrink: 0;
+    margin-right: 8px;
+    opacity: 0.9;
+}
+
+.hw-search-input {
+    flex: 1;
+    border: none;
+    outline: none;
+    font-size: 14px;
+    font-family: inherit;
+    color: var(--hw-text-main);
+    background: transparent;
+    letter-spacing: 0.02em;
+}
+
+.hw-search-input::placeholder {
+    color: var(--hw-text-dim);
+}
+
+.hw-filter-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 38px;
+    height: 38px;
+    border: 1px solid var(--hw-border-soft);
+    border-radius: 8px;
+    background: rgba(7, 23, 90, 0.95);
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s, box-shadow 0.15s;
+    position: relative;
+}
+
+.hw-filter-btn:hover {
+    background: rgba(16, 43, 120, 0.95);
+    border-color: var(--hw-border-strong);
+}
+
+.hw-filter-btn.hw-filter-active {
+    border-color: var(--hw-border-strong);
+    background: rgba(0, 181, 255, 0.18);
+    box-shadow: 0 0 0 2px rgba(30, 220, 255, 0.14);
+}
+
+.hw-filter-btn.hw-filter-active svg {
+    stroke: var(--hw-accent);
+}
+
+/* Popup */
+.popup {
+    display: none;
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    right: 0;
+    max-height: 60vh;
+    overflow-y: auto;
+    overflow-x: hidden;
+    background: rgba(2, 14, 62, 0.97);
+    -webkit-backdrop-filter: blur(10px);
+    backdrop-filter: blur(10px);
+    border: 1px solid var(--hw-border-soft);
+    border-radius: 12px;
+    box-shadow: 0 14px 36px rgba(0, 0, 0, 0.45), inset 0 0 24px rgba(12, 115, 210, 0.16);
+    z-index: 200;
+    padding: 0;
+    font-family: 'Rajdhani', 'Segoe UI', sans-serif;
+}
+
+.popup::-webkit-scrollbar {
+    width: 6px;
+}
+
+.popup::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.popup::-webkit-scrollbar-thumb {
+    background: rgba(66, 152, 224, 0.58);
+    border-radius: 4px;
+}
+
+.popup::-webkit-scrollbar-thumb:hover {
+    background: rgba(102, 182, 248, 0.84);
+}
+
+.popup-section {
+    padding: 14px 16px 8px;
+}
+
+.popup-section:first-child {
+    padding-top: 16px;
+}
+
+.popup-section-title {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--hw-accent);
+    margin: 0 0 10px 0;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.popup-section-title::before {
+    content: '';
+    display: inline-block;
+    width: 3px;
+    height: 12px;
+    background: var(--hw-accent);
+    border-radius: 2px;
+    box-shadow: 0 0 8px rgba(32, 225, 255, 0.6);
+}
+
+.popup-divider {
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(97, 177, 248, 0.52), transparent);
+    margin: 0;
+    border: none;
+}
+
+.popup label {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 7px 16px;
+    cursor: pointer;
+    font-size: 13px;
+    color: var(--hw-text-main);
+    -webkit-user-select: none;
+    user-select: none;
+    transition: background 0.12s;
+    margin: 0;
+}
+
+.popup label:hover {
+    background: rgba(42, 176, 255, 0.14);
+}
+
+.popup label b {
+    font-weight: 600;
+    color: #ffffff;
+}
+
+.popup input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    margin: 0;
+    accent-color: var(--hw-accent-strong);
+    cursor: pointer;
+    flex-shrink: 0;
+    border-radius: 3px;
+}
+
+.province {
+    margin: 0 0 2px 0;
+}
+
+.province-label {
+    display: flex !important;
+    align-items: center;
+    gap: 10px;
+    padding: 7px 16px;
+    font-weight: 500;
+    cursor: pointer;
+    font-size: 13px;
+    color: var(--hw-text-main);
+    margin: 0;
+}
+
+.province-label:hover {
+    background: rgba(35, 167, 245, 0.14);
+}
+
+.province-label b {
+    font-weight: 700;
+    color: #e7f8ff;
+}
+
+.districts {
+    display: block !important;
+    padding-left: 16px;
+    margin: 0 0 4px 0;
+    border-left: 2px solid rgba(72, 165, 240, 0.38);
+    margin-left: 28px;
+    padding-bottom: 4px;
+}
+
+.districts label {
+    display: flex !important;
+    align-items: center;
+    gap: 10px;
+    font-weight: 400;
+    font-size: 12.5px;
+    padding: 5px 12px;
+    color: #9dc8e9;
+}
+
+.districts label:hover {
+    background: rgba(40, 171, 250, 0.12);
+    color: #e0f4ff;
+}
+
+.popup-footer {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+    padding: 12px 16px;
+    background: rgba(4, 18, 74, 0.96);
+    border-top: 1px solid rgba(73, 151, 219, 0.4);
+    border-radius: 0 0 12px 12px;
+    position: sticky;
+    bottom: 0;
+}
+
+.popup-btn {
+    padding: 8px 22px;
+    border: none;
+    border-radius: 7px;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.popup-apply {
+    background: linear-gradient(180deg, #1ed7ff 0%, #00a7ff 100%);
+    color: #02203f;
+    box-shadow: 0 0 12px rgba(0, 200, 255, 0.42);
+}
+
+.popup-apply:hover {
+    filter: brightness(1.08);
+    transform: translateY(-1px);
+}
+
+.popup-apply:active {
+    transform: translateY(0);
+}
+
+.popup-clear {
+    background: rgba(7, 30, 103, 0.9);
+    color: #9fc6e4;
+    border: 1px solid rgba(92, 156, 218, 0.5);
+}
+
+.popup-clear:hover {
+    background: rgba(19, 50, 130, 0.92);
+    color: #d9f3ff;
+}
+
+.hw-section-title {
+    padding: 8px 16px 6px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    color: var(--hw-text-muted);
+    text-transform: uppercase;
+}
+
+/* 3) Tree area */
+tb-entities-hierarchy-widget .tb-entities-hierarchy-widget,
+tb-entities-hierarchy-widget > div:not(.hw-panel) {
+    flex: 1 !important;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+    padding: 2px 0 !important;
+    margin: 0 !important;
+    background: transparent !important;
+    min-height: 0 !important;
+}
+
+tb-entities-hierarchy-widget .tb-entities-hierarchy-widget::-webkit-scrollbar,
+tb-entities-hierarchy-widget > div:not(.hw-panel)::-webkit-scrollbar {
+    width: 6px;
+}
+
+tb-entities-hierarchy-widget .tb-entities-hierarchy-widget::-webkit-scrollbar-thumb,
+tb-entities-hierarchy-widget > div:not(.hw-panel)::-webkit-scrollbar-thumb {
+    background: rgba(67, 151, 223, 0.62);
+    border-radius: 4px;
+}
+
+/* 4) Mat-tree overrides */
+tb-entities-hierarchy-widget mat-tree,
+tb-entities-hierarchy-widget .mat-tree {
+    background: transparent !important;
+    padding: 4px 0 !important;
+}
+
+tb-entities-hierarchy-widget mat-nested-tree-node,
+tb-entities-hierarchy-widget mat-tree-node,
+tb-entities-hierarchy-widget .mat-nested-tree-node,
+tb-entities-hierarchy-widget .mat-tree-node {
+    display: block !important;
+}
+
+/* 5) Node row */
+tb-entities-hierarchy-widget .node-container,
+tb-entities-hierarchy-widget .mat-tree-node > div,
+tb-entities-hierarchy-widget [class*="node-container"] {
+    display: flex !important;
+    align-items: center !important;
+    min-height: 38px !important;
+    padding: 2px 16px 2px 0 !important;
+    cursor: pointer !important;
+    transition: background 0.15s ease !important;
+    border-radius: 0 !important;
+    border: none !important;
+    background: transparent !important;
+}
+
+tb-entities-hierarchy-widget .node-container:hover,
+tb-entities-hierarchy-widget .mat-tree-node > div:hover,
+tb-entities-hierarchy-widget [class*="node-container"]:hover {
+    background: var(--hw-bg-hover) !important;
+}
+
+tb-entities-hierarchy-widget .node-container.selected,
+tb-entities-hierarchy-widget .node-container.active,
+tb-entities-hierarchy-widget [class*="node-container"].selected,
+tb-entities-hierarchy-widget [class*="node-container"].active,
+tb-entities-hierarchy-widget .node-selected,
+tb-entities-hierarchy-widget .mat-tree-node.selected {
+    background: var(--hw-bg-selected) !important;
+    box-shadow: inset 3px 0 0 var(--hw-accent);
+}
+
+/* 6) Expand/collapse buttons */
+tb-entities-hierarchy-widget button[mat-icon-button],
+tb-entities-hierarchy-widget .mat-icon-button,
+tb-entities-hierarchy-widget .mat-mdc-icon-button,
+tb-entities-hierarchy-widget button.mat-icon-button,
+tb-entities-hierarchy-widget button.mat-mdc-icon-button {
+    width: 28px !important;
+    height: 28px !important;
+    min-width: 28px !important;
+    padding: 0 !important;
+    margin: 0 2px !important;
+    border: none !important;
+    background: transparent !important;
+    border-radius: 5px !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    flex-shrink: 0 !important;
+    cursor: pointer !important;
+    transition: background 0.15s ease !important;
+    line-height: 1 !important;
+}
+
+tb-entities-hierarchy-widget button[mat-icon-button]:hover,
+tb-entities-hierarchy-widget .mat-icon-button:hover,
+tb-entities-hierarchy-widget .mat-mdc-icon-button:hover {
+    background: rgba(47, 142, 215, 0.22) !important;
+}
+
+tb-entities-hierarchy-widget button[mat-icon-button] .mat-icon,
+tb-entities-hierarchy-widget .mat-icon-button .mat-icon,
+tb-entities-hierarchy-widget .mat-mdc-icon-button .mat-icon,
+tb-entities-hierarchy-widget button[mat-icon-button] mat-icon,
+tb-entities-hierarchy-widget .mat-icon-button mat-icon,
+tb-entities-hierarchy-widget .mat-mdc-icon-button mat-icon {
+    font-size: 20px !important;
+    width: 20px !important;
+    height: 20px !important;
+    line-height: 20px !important;
+    color: #86cfff !important;
+    transition: transform 0.2s ease !important;
+}
+
+/* 7) Hide built-in bullet and use injected bullet */
+tb-entities-hierarchy-widget mat-icon.node-icon,
+tb-entities-hierarchy-widget .mat-icon.node-icon,
+tb-entities-hierarchy-widget .node-icon {
+    display: none !important;
+    width: 0 !important;
+    height: 0 !important;
+    min-width: 0 !important;
+    min-height: 0 !important;
+    overflow: hidden !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    font-size: 0 !important;
+    line-height: 0 !important;
+    opacity: 0 !important;
+    position: absolute !important;
+    pointer-events: none !important;
+}
+
+.hw-bullet {
+    display: inline-block !important;
+    width: 8px !important;
+    height: 8px !important;
+    min-width: 8px !important;
+    max-width: 8px !important;
+    min-height: 8px !important;
+    max-height: 8px !important;
+    border-radius: 50% !important;
+    background: rgba(165, 197, 230, 0.7) !important;
+    margin-left: auto !important;
+    margin-right: 12px !important;
+    flex-shrink: 0 !important;
+    align-self: center !important;
+    box-shadow: 0 0 8px rgba(132, 179, 215, 0.58) !important;
+}
+
+/* 8) Node text */
+tb-entities-hierarchy-widget .node-name,
+tb-entities-hierarchy-widget .node-text,
+tb-entities-hierarchy-widget [class*="node-name"],
+tb-entities-hierarchy-widget [class*="entity-name"] {
+    font-family: 'Rajdhani', 'Segoe UI', sans-serif !important;
+    font-size: 13px !important;
+    font-weight: 600 !important;
+    color: var(--hw-text-main) !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    line-height: 1.5 !important;
+    letter-spacing: 0.015em !important;
+}
+
+/* 9) Children indentation */
+tb-entities-hierarchy-widget .mat-nested-tree-node ul,
+tb-entities-hierarchy-widget .mat-nested-tree-node > ul,
+tb-entities-hierarchy-widget .mat-nested-tree-node [role="group"],
+tb-entities-hierarchy-widget mat-nested-tree-node ul,
+tb-entities-hierarchy-widget mat-nested-tree-node > ul,
+tb-entities-hierarchy-widget mat-nested-tree-node [role="group"] {
+    padding-left: 24px !important;
+    margin: 0 !important;
+    list-style: none !important;
+}
+
+/* 10) Remove visual artifacts */
+tb-entities-hierarchy-widget .mat-card,
+tb-entities-hierarchy-widget mat-card,
+tb-entities-hierarchy-widget .mat-mdc-card {
+    box-shadow: none !important;
+    border: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    background: transparent !important;
+}
+
+tb-entities-hierarchy-widget .mat-divider,
+tb-entities-hierarchy-widget mat-divider,
+tb-entities-hierarchy-widget hr {
+    display: none !important;
+}
+
+.popup hr,
+.popup .popup-divider {
+    display: block !important;
+}
+
+tb-entities-hierarchy-widget .mat-ripple,
+tb-entities-hierarchy-widget .mat-mdc-button-ripple,
+tb-entities-hierarchy-widget .mat-button-ripple {
+    display: none !important;
+}
+
+tb-entities-hierarchy-widget .mat-spinner,
+tb-entities-hierarchy-widget .mat-progress-spinner,
+tb-entities-hierarchy-widget mat-spinner {
+    margin: 40px auto !important;
+}
+
+tb-entities-hierarchy-widget .mat-spinner circle,
+tb-entities-hierarchy-widget mat-spinner circle {
+    stroke: var(--hw-accent) !important;
+}
+
+tb-entities-hierarchy-widget .no-data,
+tb-entities-hierarchy-widget [class*="no-data"],
+tb-entities-hierarchy-widget .empty-state {
+    text-align: center !important;
+    color: var(--hw-text-muted) !important;
+    font-size: 14px !important;
+    padding: 40px 16px !important;
+}
+
+tb-entities-hierarchy-widget .mat-tooltip {
+    font-size: 12px !important;
+    color: #dff5ff !important;
+    background: rgba(7, 27, 90, 0.98) !important;
+    border: 1px solid rgba(75, 157, 226, 0.55) !important;
+    border-radius: 6px !important;
+}
+
+/* 11) Search highlight */
+.hw-highlight > .node-container,
+.hw-highlight > [class*="node-container"],
+.hw-highlight > div {
+    background: var(--hw-bg-highlight) !important;
+}
+
+.hw-highlight > .node-container .node-name,
+.hw-highlight > .node-container [class*="node-name"],
+.hw-highlight > div .node-name,
+.hw-highlight > div [class*="node-name"] {
+    font-weight: 700 !important;
+    color: #9ff4ff !important;
+    text-shadow: 0 0 10px rgba(36, 233, 255, 0.26);
+}
+
+/* 12) Responsive */
+@media (max-width: 480px) {
+    .hw-header {
+        padding: 10px 12px 8px;
+    }
+
+    .hw-header-title {
+        font-size: 18px;
+    }
+
+    .hw-search-bar {
+        padding: 0 12px 10px;
+    }
+
+    .hw-section-title {
+        padding: 6px 12px 4px;
+    }
+
+    tb-entities-hierarchy-widget .node-container,
+    tb-entities-hierarchy-widget .mat-tree-node > div {
+        min-height: 40px !important;
+    }
+
+    tb-entities-hierarchy-widget .node-name,
+    tb-entities-hierarchy-widget [class*="node-name"] {
+        font-size: 13px !important;
+    }
+}

@@ -29,7 +29,7 @@ Finance_Dummy.txt
 Degradation Adjusted Yield Index/.py
 
 # Local utility scratch space and demo data
-test_v2_hierarchy/
+/test_v2_hierarchy/
 **/demo_device_*.csv
 Financials/demo_device_financials.csv
 Grid & Losses/demo_device_grid.csv
