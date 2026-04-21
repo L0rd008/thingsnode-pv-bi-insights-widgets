@@ -193,7 +193,7 @@
     background: transparent;
     border: 1px solid rgba(6,245,255,0.25);
     color: var(--c-accent);
-    font-size: 0.45em;
+    font-size: 0.5em;
     line-height: 1;
     padding: 0.18em 0.4em;
     border-radius: 4px;
@@ -211,7 +211,7 @@
 }
 
 .date-label {
-    font-size: 0.5em;
+    font-size: 0.7em;
     font-weight: 700;
     color: var(--c-text-dim);
     cursor: pointer;
@@ -234,18 +234,22 @@
    CUSTOM CALENDAR OVERLAY  [F3]
    ───────────────────────────── */
 .calendar-overlay {
-    position: absolute;
-    top: calc(100% + 4px);
-    left: 50%;
-    transform: translateX(-50%);
+    position: fixed;
+    top: 0;
+    left: 0;
+    transform: none;
     background: rgba(5,20,52,0.98);
     border: 1px solid rgba(6,245,255,0.35);
     border-radius: 8px;
     padding: 8px;
     box-shadow: 0 8px 24px rgba(0,0,0,0.6);
-    z-index: 100;
-    width: min(260px, 90vw);
+    z-index: 300;
+    width: min(280px, calc(100vw - 16px));
+    max-height: min(320px, calc(100vh - 16px));
     box-sizing: border-box;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
 }
 
 /* Calendar header (month + nav) */
