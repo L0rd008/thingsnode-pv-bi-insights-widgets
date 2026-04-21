@@ -8,7 +8,7 @@
    [F1] Full-day 5AM–7PM for all day views (no "clamp to now" for today)
    [F2] Date navigation: ◀ Prev / date label (opens custom calendar) / Next ▶
    [F3] Custom calendar overlay with curtailed-day highlighting (amber dots)
-   [F4] Separate stepped setpoint line (amber, V4-style) as dataset 4
+   [F4] Separate stepped setpoint line (amber, V4-style) as a dedicated dataset
    [F5] V3 timeframe dropdown preserved for week/month views
    [F6] Improved entity resolution, 250ms debounce, onDataUpdated hook,
         per-key URL encoding, auto-capacity scaling
@@ -28,14 +28,18 @@
      When setpoint >= 100%: ceiling = null (not drawn)
      Visible curtailment limit line.
 
-   Dataset 3 — "Curtailment Loss Fill"  (internal red fill anchor)
+   Dataset 3 — "Total Loss Fill"  (internal amber fill anchor)
+     Internal dataset that fills total-loss regions without
+     overlapping the curtailment-loss region.
+
+   Dataset 4 — "Curtailment Loss Fill"  (internal red fill anchor)
      Internal dataset that fills the gap between potential power
      and the curtailment ceiling when potential > ceiling.
 
-   Dataset 4 — "Curtailment Markers"  (orange dots)
+   Dataset 5 — "Curtailment Markers"  (orange dots)
      Marks the first and last bucket of each curtailment event.
 
-   Dataset 5 — "Setpoint Line"  (amber dashed stepped line)
+   Dataset 6 — "Setpoint Line"  (amber dashed stepped line)
      Shows the raw setpoint-derived allowed power level.
      Stepped (holds value until next change) for visual precision.
 
@@ -65,6 +69,7 @@ var _fetchTimer = null;
 var _selectedDate = null;     /* null = use timeframe dropdown; Date = override with that date */
 var _curtailedDays = {};      /* { 'YYYY-MM-DD': true } for calendar highlighting */
 var _calendarMonth = null;    /* { y, m } for calendar nav */
+var _calendarPortalAttached = false;
 var _intervalOverrideMs = null; /* null = auto (timeframe-based); number = manual override in ms */
 
 /* ── Timeframe display labels ── */
@@ -365,7 +370,14 @@ function closeCalendar() {
     $calendarOverlay.hide();
 }
 
+function ensureCalendarPortal() {
+    if (!_calendarOverlay || !$calendarOverlay.length || _calendarPortalAttached) return;
+    $(document.body).append($calendarOverlay);
+    _calendarPortalAttached = true;
+}
+
 function openCalendar() {
+    ensureCalendarPortal();
     var sel = getSelectedDateObj();
     _calendarMonth = { y: sel.getFullYear(), m: sel.getMonth() };
     renderCalendar();
@@ -593,8 +605,8 @@ function initChart() {
         id: 'curtLossLabel',
         afterDraw: function (chart) {
             var ds = chart.data.datasets;
-            if (ds.length < 4) return;
-            var potD = ds[0].data, fillD = ds[3].data;
+            if (ds.length < 5) return;
+            var potD = ds[0].data, fillD = ds[4].data;
             if (!potD || !potD.length || !fillD || !fillD.length) return;
             var area = chart.chartArea; if (!area) return;
             var xs = chart.scales.x, ys = chart.scales.y, cc = chart.ctx;
@@ -697,7 +709,7 @@ function initChart() {
                     pointRadius: 0, pointHoverRadius: displayPotential ? 3 : 0,
                     pointHoverBackgroundColor: 'rgba(255,255,255,0.7)',
                     tension: 0.35,
-                    fill: displayPotential ? { target: 1, above: 'rgba(255,193,7,0.35)', below: 'transparent' } : false,
+                    fill: false,
                     spanGaps: false, order: 6
                 },
                 /* 1 — Exported Power */
@@ -725,7 +737,21 @@ function initChart() {
                     fill: false,
                     order: 5
                 },
-                /* 3 — Curtailment Loss Fill (internal, invisible border) */
+                /* 3 — Total Loss Fill (internal, invisible border) */
+                {
+                    label: '_total_fill',
+                    data: [],
+                    borderColor: 'transparent',
+                    backgroundColor: 'transparent',
+                    borderWidth: 0,
+                    pointRadius: 0,
+                    pointHoverRadius: 0,
+                    tension: 0.35,
+                    spanGaps: false,
+                    fill: { target: 1, above: 'rgba(255,193,7,0.35)', below: 'transparent' },
+                    order: 3
+                },
+                /* 4 — Curtailment Loss Fill (internal, invisible border) */
                 {
                     label: '_curtail_fill',
                     data: [],
@@ -739,7 +765,7 @@ function initChart() {
                     fill: { target: 0, above: 'rgba(229,57,53,0.38)', below: 'transparent' },
                     order: 2
                 },
-                /* 4 — Curtailment Markers (start/end dots) */
+                /* 5 — Curtailment Markers (start/end dots) */
                 {
                     label: '_markers',
                     data: [],
@@ -753,7 +779,7 @@ function initChart() {
                     fill: false,
                     order: 4
                 },
-                /* 5 — Setpoint Line (stepped amber, V4-style) */
+                /* 6 — Setpoint Line (stepped amber, V4-style) */
                 {
                     label: 'Setpoint Limit',
                     data: [],
@@ -797,14 +823,14 @@ function initChart() {
                     padding: { top: 6, right: 10, bottom: 6, left: 10 },
                     displayColors: false,
                     filter: function (item) {
-                        if (item.datasetIndex === 3 || item.datasetIndex === 4) return false;
+                        if (item.datasetIndex === 3 || item.datasetIndex === 4 || item.datasetIndex === 5) return false;
                         if (item.datasetIndex === 0 && !shouldDisplayPotential()) return false;
                         return true;
                     },
                     callbacks: {
                         title: function (items) { return items.length ? items[0].label : ''; },
                         label: function (ctx2) {
-                            if (ctx2.datasetIndex === 3 || ctx2.datasetIndex === 4) return null;
+                            if (ctx2.datasetIndex === 3 || ctx2.datasetIndex === 4 || ctx2.datasetIndex === 5) return null;
                             if (ctx2.datasetIndex === 0 && !shouldDisplayPotential()) return null;
                             if (ctx2.parsed.y == null) return null;
                             var dec2 = parseInt(s.decimals) || 1;
@@ -978,6 +1004,30 @@ function buildPotentialCurveFromWindow(pointCount, capacityKw, firstOn, lastOn) 
     return potential;
 }
 
+function buildTotalLossFillSeries(potentialKw, exportedKw, ceilingKw) {
+    var len = Math.max(
+        (potentialKw || []).length,
+        (exportedKw || []).length,
+        (ceilingKw || []).length
+    );
+    var fill = new Array(len).fill(null);
+
+    for (var i = 0; i < fill.length; i++) {
+        var potV = potentialKw[i];
+        var expV = exportedKw[i];
+        var ceilV = ceilingKw[i];
+
+        if (potV == null || expV == null || potV <= expV) continue;
+
+        if (ceilV != null && potV > ceilV) {
+            if (ceilV > expV) fill[i] = ceilV;
+        } else {
+            fill[i] = potV;
+        }
+    }
+    return fill;
+}
+
 function buildCurtailmentFillSeries(potentialKw, ceilingKw) {
     var fill = new Array(Math.max(potentialKw.length, ceilingKw.length)).fill(null);
     for (var i = 0; i < fill.length; i++) {
@@ -1035,17 +1085,20 @@ function positionCalendarOverlay() {
     var anchorEl = $dateLabelEl[0];
     if (!overlayEl || !anchorEl) return;
 
+    var viewport = window.visualViewport || null;
     var pad = 8;
     var gap = 6;
-    var viewportW = window.innerWidth || document.documentElement.clientWidth || 320;
-    var viewportH = window.innerHeight || document.documentElement.clientHeight || 240;
+    var viewportW = viewport ? viewport.width : (window.innerWidth || document.documentElement.clientWidth || 320);
+    var viewportH = viewport ? viewport.height : (window.innerHeight || document.documentElement.clientHeight || 240);
+    var viewportLeft = viewport ? viewport.offsetLeft : 0;
+    var viewportTop = viewport ? viewport.offsetTop : 0;
     var targetWidth = Math.min(280, Math.max(220, viewportW - (pad * 2)));
     var maxHeight = Math.max(180, viewportH - (pad * 2));
 
     $calendarOverlay.css({
         position: 'fixed',
-        left: '0px',
-        top: '0px',
+        left: viewportLeft + 'px',
+        top: viewportTop + 'px',
         width: targetWidth + 'px',
         maxHeight: maxHeight + 'px'
     });
@@ -1053,15 +1106,15 @@ function positionCalendarOverlay() {
     var anchorRect = anchorEl.getBoundingClientRect();
     var overlayRect = overlayEl.getBoundingClientRect();
     var left = anchorRect.left + ((anchorRect.width - overlayRect.width) / 2);
-    left = Math.max(pad, Math.min(viewportW - overlayRect.width - pad, left));
+    left = Math.max(viewportLeft + pad, Math.min(viewportLeft + viewportW - overlayRect.width - pad, left));
 
     var belowTop = anchorRect.bottom + gap;
     var aboveTop = anchorRect.top - overlayRect.height - gap;
     var top = belowTop;
-    if (belowTop + overlayRect.height > viewportH - pad && aboveTop >= pad) {
+    if (belowTop + overlayRect.height > viewportTop + viewportH - pad && aboveTop >= viewportTop + pad) {
         top = aboveTop;
-    } else if (belowTop + overlayRect.height > viewportH - pad) {
-        top = Math.max(pad, viewportH - overlayRect.height - pad);
+    } else if (belowTop + overlayRect.height > viewportTop + viewportH - pad) {
+        top = Math.max(viewportTop + pad, viewportTop + viewportH - overlayRect.height - pad);
     }
 
     $calendarOverlay.css({
@@ -1497,9 +1550,10 @@ function processLiveTimeSeries(rawData, minTime, maxTime, bucketMs, historyPower
         }
     }
 
+    var dataTotalLossFillKw = buildTotalLossFillSeries(dataPotentialKw, dataExportedKw, dataCurtailCeilKw);
     var dataCurtailFillKw = buildCurtailmentFillSeries(dataPotentialKw, dataCurtailCeilKw);
 
-    renderChartData(labels, dataPotentialKw, dataExportedKw, dataCurtailCeilKw, dataCurtailFillKw, dataMarkersKw, dataSetpointKw, capacityKw);
+    renderChartData(labels, dataPotentialKw, dataExportedKw, dataCurtailCeilKw, dataTotalLossFillKw, dataCurtailFillKw, dataMarkersKw, dataSetpointKw, capacityKw);
     updateSummary(dataPotentialKw, dataExportedKw, dataCurtailCeilKw, bucketMs, capacityKw);
 }
 
@@ -1564,9 +1618,10 @@ function loadSimulation(minTime, maxTime, bucketMs) {
         markers[N - 1] = ceiling[N - 1];
     }
 
+    var totalLossFill = buildTotalLossFillSeries(potential, exported, ceiling);
     var curtailFill = buildCurtailmentFillSeries(potential, ceiling);
 
-    renderChartData(labels, potential, exported, ceiling, curtailFill, markers, setpointLine, capacityKw);
+    renderChartData(labels, potential, exported, ceiling, totalLossFill, curtailFill, markers, setpointLine, capacityKw);
     updateSummary(potential, exported, ceiling, bucketMs, capacityKw);
 }
 
@@ -1582,14 +1637,15 @@ function renderNoData() {
     }
 }
 
-function renderChartData(labels, potentialKw, exportedKw, ceilingKw, curtailFillKw, markersKw, setpointDataKw, capacityKw) {
+function renderChartData(labels, potentialKw, exportedKw, ceilingKw, totalLossFillKw, curtailFillKw, markersKw, setpointDataKw, capacityKw) {
     if (!myChart) return;
 
     var displayPotential = shouldDisplayPotential();
     var potentialDisplay = toDisplaySeries(potentialKw);
     var exportedDisplay  = toDisplaySeries(exportedKw);
     var ceilingDisplay   = toDisplaySeries(ceilingKw);
-    var fillDisplay      = toDisplaySeries(curtailFillKw);
+    var totalFillDisplay = toDisplaySeries(totalLossFillKw);
+    var curtailFillDisplay = toDisplaySeries(curtailFillKw);
     var markersDisplay   = toDisplaySeries(markersKw);
     var setpointDisplay  = toDisplaySeries(setpointDataKw || []);
 
@@ -1597,18 +1653,20 @@ function renderChartData(labels, potentialKw, exportedKw, ceilingKw, curtailFill
     myChart.data.datasets[0].data = potentialDisplay;
     myChart.data.datasets[1].data = exportedDisplay;
     myChart.data.datasets[2].data = ceilingDisplay;
-    myChart.data.datasets[3].data = fillDisplay;
-    myChart.data.datasets[4].data = markersDisplay;
-    myChart.data.datasets[5].data = setpointDisplay;
+    myChart.data.datasets[3].data = totalFillDisplay;
+    myChart.data.datasets[4].data = curtailFillDisplay;
+    myChart.data.datasets[5].data = markersDisplay;
+    myChart.data.datasets[6].data = setpointDisplay;
 
     myChart.data.datasets[0].borderColor = displayPotential ? 'rgba(255,255,255,0.55)' : 'transparent';
-    myChart.data.datasets[0].fill = displayPotential
-        ? { target: 1, above: 'rgba(255,193,7,0.35)', below: 'transparent' }
-        : false;
+    myChart.data.datasets[0].fill = false;
     myChart.data.datasets[0].pointHoverRadius = displayPotential ? 3 : 0;
     myChart.data.datasets[0].pointHoverBackgroundColor = displayPotential ? 'rgba(255,255,255,0.7)' : 'transparent';
 
     myChart.data.datasets[3].fill = canModelPotential()
+        ? { target: 1, above: 'rgba(255,193,7,0.35)', below: 'transparent' }
+        : false;
+    myChart.data.datasets[4].fill = canModelPotential()
         ? { target: 0, above: 'rgba(229,57,53,0.38)', below: 'transparent' }
         : false;
 
@@ -1616,9 +1674,9 @@ function renderChartData(labels, potentialKw, exportedKw, ceilingKw, curtailFill
         $legendPotentialWrap.css('display', displayPotential ? 'flex' : 'none');
     }
 
-    /* Total-loss legend visibility tracks the visible potential overlay only. */
+    /* Total-loss fill remains available even when the dashed potential line is hidden. */
     var $tlWrap = $el.find('.js-legend-total-loss-wrap');
-    if ($tlWrap.length) $tlWrap.css('display', displayPotential ? 'flex' : 'none');
+    if ($tlWrap.length) $tlWrap.css('display', canModelPotential() ? 'flex' : 'none');
 
     /* Setpoint legend visibility */
     if ($legendSetpoint && $legendSetpoint.length) {
@@ -1753,6 +1811,10 @@ self.onDestroy = function () {
     if (myChart) { myChart.destroy(); myChart = null; }
     $(document).off('click.v5cal').off('click.v5dd');
     $(window).off('resize.v5calpos scroll.v5calpos');
+    if ($calendarOverlay && $calendarOverlay.length) {
+        $calendarOverlay.remove();
+        _calendarPortalAttached = false;
+    }
     $el.find('.js-dd-int-menu').off('click');
     $el.find('.js-dd-int-btn').off('click');
 };

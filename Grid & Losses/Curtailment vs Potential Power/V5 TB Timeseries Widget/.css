@@ -234,6 +234,10 @@
    CUSTOM CALENDAR OVERLAY  [F3]
    ───────────────────────────── */
 .calendar-overlay {
+    --c-accent: #06F5FF;
+    --c-text: #FFFFFF;
+    --c-text-dim: #B0BEC5;
+    --c-text-muted: #90A4AE;
     position: fixed;
     top: 0;
     left: 0;
@@ -250,6 +254,8 @@
     overflow-x: hidden;
     overflow-y: auto;
     overscroll-behavior: contain;
+    color: var(--c-text);
+    font-family: Roboto, sans-serif;
 }
 
 /* Calendar header (month + nav) */
