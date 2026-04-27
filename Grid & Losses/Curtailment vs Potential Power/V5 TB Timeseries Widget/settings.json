@@ -5,5 +5,12 @@
         "type": "text",
         "default": "",
         "helpText": "V5 uses an inline settings modal (gear icon, Tenant Admin only). Configure data keys, capacity, and display options from within the widget."
+    },
+    {
+        "id": "potentialPowerKeys",
+        "name": "Potential Power Key (pvlib)",
+        "type": "text",
+        "default": "potential_power",
+        "helpText": "Timeseries key written by pvlib-service (Gap 8). Widget fetches this first and renders it as the dashed Potential Power line. Leave blank to fall back to the half-sine model."
     }
 ]
