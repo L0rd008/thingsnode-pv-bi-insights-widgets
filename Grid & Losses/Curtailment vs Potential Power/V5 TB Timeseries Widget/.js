@@ -69,8 +69,9 @@ var _fetchTimer = null;
 var _selectedDate = null;     /* null = use timeframe dropdown; Date = override with that date */
 var _curtailedDays = {};      /* { 'YYYY-MM-DD': true } for calendar highlighting */
 var _calendarMonth = null;    /* { y, m } for calendar nav */
-var _calendarPortalAttached = false;
+var _savedOverflows = [];     /* ancestor overflow values saved while calendar is open */
 var _intervalOverrideMs = null; /* null = auto (timeframe-based); number = manual override in ms */
+var _tbPotentialAvailable = false; /* true when valid TB physics data found for the current period */
 
 /* ── Timeframe display labels ── */
 var TF_LABELS = {
@@ -119,6 +120,7 @@ function loadSettings() {
         timeframe:          'today',
         actualPowerKeys:    'active_power',
         setpointKeys:       'setpoint_active_power, curtailment_limit',
+        potentialPowerKeys: 'potential_power',
         plantCapacityKey:   'Capacity',
         capacityUnit:       'kW',
         displayUnit:        'kW',
@@ -139,6 +141,7 @@ function loadSettings() {
 function saveSettings() {
     s.actualPowerKeys   = $('#set-actual-keys').val();
     s.setpointKeys      = $('#set-setpoint-keys').val();
+    s.potentialPowerKeys = $('#set-potential-keys').val();
     s.plantCapacityKey  = $('#set-capacity-key').val();
     s.capacityUnit      = $('#set-cap-unit').val();
     s.displayUnit       = $('#set-display-unit').val() || 'kW';
@@ -154,6 +157,7 @@ function saveSettings() {
 function populateModal() {
     $('#set-actual-keys').val(s.actualPowerKeys);
     $('#set-setpoint-keys').val(s.setpointKeys);
+    $('#set-potential-keys').val(s.potentialPowerKeys || '');
     $('#set-capacity-key').val(s.plantCapacityKey);
     $('#set-cap-unit').val(s.capacityUnit);
     $('#set-display-unit').val(s.displayUnit || 'kW');
@@ -304,10 +308,6 @@ function bindDateNav() {
     $calendarOverlay.on('click', function (e) {
         e.stopPropagation();
     });
-
-    $(window).on('resize.v5calpos scroll.v5calpos', function () {
-        if ($calendarOverlay.is(':visible')) positionCalendarOverlay();
-    });
 }
 
 function getSelectedDateObj() {
@@ -339,14 +339,14 @@ function updateDateLabel() {
         /* Show timeframe label when no specific date is selected */
         var tf = s.timeframe || 'today';
         if (isDayView(tf)) {
-            $dateLabelEl.text('Today — ' + formatDateISO(today)).addClass('is-today');
+            $dateLabelEl.text('Today \u2014 ' + formatDateISO(today)).addClass('is-today');
         } else {
             $dateLabelEl.text(TF_LABELS[tf] || 'Today').removeClass('is-today');
         }
         $dateNextBtn.prop('disabled', true);
     } else if (_selectedDate) {
         var dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-        $dateLabelEl.text(dayNames[sel.getDay()] + ' — ' + formatDateISO(sel)).removeClass('is-today');
+        $dateLabelEl.text(dayNames[sel.getDay()] + ' \u2014 ' + formatDateISO(sel)).removeClass('is-today');
         $dateNextBtn.prop('disabled', false);
     } else {
         /* Non-day timeframe, no selected date */
@@ -356,7 +356,13 @@ function updateDateLabel() {
 }
 
 /* ────────────────────────────────────────────────────
-   CALENDAR OVERLAY  [F3]
+   CALENDAR OVERLAY  [F3] — overflow-escape approach
+   ────────────────────────────────────────────────────
+   The calendar sits inside .date-nav (position:relative)
+   as position:absolute. To prevent clipping by .curt-card
+   or any ThingsBoard parent container, we temporarily set
+   overflow:visible on all ancestors while the calendar is
+   open, then restore on close.
    ──────────────────────────────────────────────────── */
 function toggleCalendar() {
     if ($calendarOverlay.is(':visible')) {
@@ -368,22 +374,50 @@ function toggleCalendar() {
 
 function closeCalendar() {
     $calendarOverlay.hide();
+    restoreAncestorOverflows();
 }
 
-function ensureCalendarPortal() {
-    if (!_calendarOverlay || !$calendarOverlay.length || _calendarPortalAttached) return;
-    $(document.body).append($calendarOverlay);
-    _calendarPortalAttached = true;
+/* Walk up from calendar to the document root, save & override
+   any ancestor that clips overflow so the calendar can extend
+   beyond the widget card boundaries. */
+function clearAncestorOverflows() {
+    _savedOverflows = [];
+    var el = $calendarOverlay[0];
+    if (!el) return;
+    var parent = el.parentElement;
+    while (parent && parent !== document.documentElement) {
+        var cs = window.getComputedStyle(parent);
+        if (cs.overflow !== 'visible' || cs.overflowX !== 'visible' || cs.overflowY !== 'visible') {
+            _savedOverflows.push({
+                el: parent,
+                overflow:  parent.style.overflow,
+                overflowX: parent.style.overflowX,
+                overflowY: parent.style.overflowY
+            });
+            parent.style.overflow  = 'visible';
+            parent.style.overflowX = 'visible';
+            parent.style.overflowY = 'visible';
+        }
+        parent = parent.parentElement;
+    }
+}
+
+function restoreAncestorOverflows() {
+    for (var i = 0; i < _savedOverflows.length; i++) {
+        var saved = _savedOverflows[i];
+        saved.el.style.overflow  = saved.overflow;
+        saved.el.style.overflowX = saved.overflowX;
+        saved.el.style.overflowY = saved.overflowY;
+    }
+    _savedOverflows = [];
 }
 
 function openCalendar() {
-    ensureCalendarPortal();
     var sel = getSelectedDateObj();
     _calendarMonth = { y: sel.getFullYear(), m: sel.getMonth() };
     renderCalendar();
-    $calendarOverlay.css({ display: 'block', visibility: 'hidden' });
-    positionCalendarOverlay();
-    $calendarOverlay.css('visibility', 'visible');
+    clearAncestorOverflows();
+    $calendarOverlay.show();
     /* Trigger curtailed-day fetch for the displayed month */
     fetchCurtailedDaysForMonth(_calendarMonth.y, _calendarMonth.m);
 }
@@ -441,7 +475,6 @@ function renderCalendar() {
     html += '</div>';
 
     $calendarOverlay.html(html);
-    if ($calendarOverlay.is(':visible')) positionCalendarOverlay();
 
     /* Bind click events */
     $calendarOverlay.find('.cal-day[data-date]').on('click', function () {
@@ -762,7 +795,7 @@ function initChart() {
                     pointHoverRadius: 0,
                     tension: 0.35,
                     spanGaps: false,
-                    fill: { target: 0, above: 'rgba(229,57,53,0.38)', below: 'transparent' },
+                    fill: { target: 0, above: 'transparent', below: 'rgba(229,57,53,0.38)' },
                     order: 2
                 },
                 /* 5 — Curtailment Markers (start/end dots) */
@@ -886,12 +919,19 @@ function effectiveTimeframe() {
     return s.timeframe || 'today';
 }
 
+/* canModelPotential: true on day views — gates the half-sine curve only */
 function canModelPotential() {
     return isDayView(effectiveTimeframe());
 }
 
+/* hasPotentialData: true when any potential source is available.
+   TB physics works on ALL views; half-sine is day views only. */
+function hasPotentialData() {
+    return _tbPotentialAvailable || canModelPotential();
+}
+
 function shouldDisplayPotential() {
-    return s.showPotentialCurve && canModelPotential();
+    return s.showPotentialCurve && hasPotentialData();
 }
 
 function isLiveTodayView() {
@@ -1076,51 +1116,6 @@ function estimateLiveTodayLastPositiveBucket(historySeries, minTime, bucketMs, t
     var proxyBucket = Math.floor((proxyTs - minTime) / bucketMs);
     if (!isFinite(proxyBucket)) return null;
     return Math.max(0, Math.min(pointCount - 1, proxyBucket));
-}
-
-function positionCalendarOverlay() {
-    if (!$calendarOverlay.length || !$calendarOverlay.is(':visible') || !$dateLabelEl.length) return;
-
-    var overlayEl = $calendarOverlay[0];
-    var anchorEl = $dateLabelEl[0];
-    if (!overlayEl || !anchorEl) return;
-
-    var viewport = window.visualViewport || null;
-    var pad = 8;
-    var gap = 6;
-    var viewportW = viewport ? viewport.width : (window.innerWidth || document.documentElement.clientWidth || 320);
-    var viewportH = viewport ? viewport.height : (window.innerHeight || document.documentElement.clientHeight || 240);
-    var viewportLeft = viewport ? viewport.offsetLeft : 0;
-    var viewportTop = viewport ? viewport.offsetTop : 0;
-    var targetWidth = Math.min(280, Math.max(220, viewportW - (pad * 2)));
-    var maxHeight = Math.max(180, viewportH - (pad * 2));
-
-    $calendarOverlay.css({
-        position: 'fixed',
-        left: viewportLeft + 'px',
-        top: viewportTop + 'px',
-        width: targetWidth + 'px',
-        maxHeight: maxHeight + 'px'
-    });
-
-    var anchorRect = anchorEl.getBoundingClientRect();
-    var overlayRect = overlayEl.getBoundingClientRect();
-    var left = anchorRect.left + ((anchorRect.width - overlayRect.width) / 2);
-    left = Math.max(viewportLeft + pad, Math.min(viewportLeft + viewportW - overlayRect.width - pad, left));
-
-    var belowTop = anchorRect.bottom + gap;
-    var aboveTop = anchorRect.top - overlayRect.height - gap;
-    var top = belowTop;
-    if (belowTop + overlayRect.height > viewportTop + viewportH - pad && aboveTop >= viewportTop + pad) {
-        top = aboveTop;
-    } else if (belowTop + overlayRect.height > viewportTop + viewportH - pad) {
-        top = Math.max(viewportTop + pad, viewportTop + viewportH - overlayRect.height - pad);
-    }
-
-    $calendarOverlay.css({
-        left: left + 'px',
-        top: top + 'px'
-    });
 }
 
 /* ────────────────────────────────────────────────────
@@ -1333,30 +1328,33 @@ function fetchLiveData() {
     var entity = resolveEntity();
     if (!entity || !entity.id) { renderNoData(); return; }
 
-    var actualKeys = parseCommaList(s.actualPowerKeys);
-    var spKeys     = parseCommaList(s.setpointKeys);
-    var capKey     = s.plantCapacityKey;
-    var tf         = effectiveTimeframe();
-    var bounds     = getTimeBounds(tf);
-    var startTs    = bounds.minTime;
-    var endTs      = bounds.maxTime;
-    var bucketMs   = getBucketMs(tf);
+    var actualKeys    = parseCommaList(s.actualPowerKeys);
+    var spKeys        = parseCommaList(s.setpointKeys);
+    var potentialKeys = parseCommaList(s.potentialPowerKeys || '');
+    var capKey        = s.plantCapacityKey;
+    var tf            = effectiveTimeframe();
+    var bounds        = getTimeBounds(tf);
+    var startTs       = bounds.minTime;
+    var endTs         = bounds.maxTime;
+    var bucketMs      = getBucketMs(tf);
 
     var baseUrl = '/api/plugins/telemetry/' + entity.type + '/' + entity.id;
 
     var needsSunsetProxy = (isLiveTodayView() && canModelPotential() && actualKeys.length > 0);
 
-    /* ── 4 parallel requests: capacity + power + setpoint + sunset proxy ── */
-    var capacityDone = false, powerDone = false, setpointDone = false, historyPowerDone = !needsSunsetProxy;
-    var powerData = null, setpointData = null, historyPowerData = null;
+    /* ── 5 parallel requests: capacity + power + setpoint + sunset proxy + potential ── */
+    var capacityDone  = false, powerDone = false, setpointDone = false;
+    var historyPowerDone = !needsSunsetProxy;
+    var potentialDone = !potentialKeys.length;
+    var powerData = null, setpointData = null, historyPowerData = null, potentialPowerData = null;
 
     var tryProcess = function () {
-        if (!capacityDone || !powerDone || !setpointDone || !historyPowerDone) return;
+        if (!capacityDone || !powerDone || !setpointDone || !historyPowerDone || !potentialDone) return;
         var merged = {};
         if (powerData)    Object.assign(merged, powerData);
         if (setpointData) Object.assign(merged, setpointData);
         if (merged && Object.keys(merged).length > 0) {
-            processLiveTimeSeries(merged, startTs, endTs, bucketMs, historyPowerData);
+            processLiveTimeSeries(merged, startTs, endTs, bucketMs, historyPowerData, potentialPowerData);
         } else {
             loadSimulation(startTs, endTs, bucketMs);
         }
@@ -1422,13 +1420,25 @@ function fetchLiveData() {
         } catch (e) { historyPowerDone = true; tryProcess(); }
     }
 
+    /* 5) Physics potential_power from pvlib-service (Gap 8 — TB-first, falls back to half-sine) */
+    if (potentialKeys.length) {
+        var potKeysEnc = potentialKeys.map(function(k) { return encodeURIComponent(k); }).join(',');
+        var potUrl = buildPowerTimeseriesUrl(baseUrl, potKeysEnc, startTs, endTs, bucketMs, 50000);
+        try {
+            self.ctx.http.get(potUrl).subscribe(
+                function (data) { potentialPowerData = data; potentialDone = true; tryProcess(); },
+                function ()     { potentialDone = true; tryProcess(); }
+            );
+        } catch (e) { potentialDone = true; tryProcess(); }
+    }
+
     tryProcess();
 }
 
 /* ────────────────────────────────────────────────────
    DATA PROCESSING — LIVE
    ──────────────────────────────────────────────────── */
-function processLiveTimeSeries(rawData, minTime, maxTime, bucketMs, historyPowerData) {
+function processLiveTimeSeries(rawData, minTime, maxTime, bucketMs, historyPowerData, tbPotentialData) {
     isLiveData = true;
     updateStatusBadge('live');
 
@@ -1492,7 +1502,42 @@ function processLiveTimeSeries(rawData, minTime, maxTime, bucketMs, historyPower
         capacityKw = getRoundedCapacityKw(maxDataKw * 1.1);
     }
 
-    if (canModelPotential()) {
+    /* [V6-A] TB physics potential_power — works for any timeframe (day / week / month).
+       Negative values (-1 sentinels written when pvlib has no valid computation) are
+       silently dropped; only positive readings are bucketed and averaged. */
+    var tbPotentialUsed = false;
+    _tbPotentialAvailable = false;
+    if (tbPotentialData) {
+        var potKeysLocal = parseCommaList(s.potentialPowerKeys || '');
+        var rawPot = getFirstMatchingSeries(tbPotentialData, potKeysLocal);
+        if (rawPot && rawPot.length > 0) {
+            var potBucketSum  = new Array(N).fill(0);
+            var potBucketHits = new Array(N).fill(0);
+            for (var tp = 0; tp < rawPot.length; tp++) {
+                var tpTs  = parseInt(rawPot[tp].ts, 10);
+                var tpVal = parseFloat(rawPot[tp].value);
+                /* Skip -1 sentinels and any other negative/invalid values */
+                if (isNaN(tpVal) || tpVal < 0 || isNaN(tpTs) || tpTs < minTime || tpTs > maxTime) continue;
+                var tpBi = Math.min(Math.floor((tpTs - minTime) / bucketMs), N - 1);
+                potBucketSum[tpBi]  += tpVal;
+                potBucketHits[tpBi] += 1;
+            }
+            var anyPotValid = false;
+            for (var tp2 = 0; tp2 < N; tp2++) {
+                if (potBucketHits[tp2] > 0) {
+                    dataPotentialKw[tp2] = potBucketSum[tp2] / potBucketHits[tp2];
+                    anyPotValid = true;
+                }
+            }
+            if (anyPotValid) {
+                tbPotentialUsed = true;
+                _tbPotentialAvailable = true;
+            }
+        }
+    }
+
+    /* [V6-B] Half-sine fallback — day views only, when no valid TB physics data found */
+    if (!tbPotentialUsed && canModelPotential()) {
         var thresholdKw = capacityKw * 0.005;
         var liveWindow = getProductionWindow(dataExportedKw, thresholdKw);
         if (liveWindow.firstOn >= 0) {
@@ -1663,20 +1708,20 @@ function renderChartData(labels, potentialKw, exportedKw, ceilingKw, totalLossFi
     myChart.data.datasets[0].pointHoverRadius = displayPotential ? 3 : 0;
     myChart.data.datasets[0].pointHoverBackgroundColor = displayPotential ? 'rgba(255,255,255,0.7)' : 'transparent';
 
-    myChart.data.datasets[3].fill = canModelPotential()
+    myChart.data.datasets[3].fill = hasPotentialData()
         ? { target: 1, above: 'rgba(255,193,7,0.35)', below: 'transparent' }
         : false;
-    myChart.data.datasets[4].fill = canModelPotential()
-        ? { target: 0, above: 'rgba(229,57,53,0.38)', below: 'transparent' }
+    myChart.data.datasets[4].fill = hasPotentialData()
+        ? { target: 0, above: 'transparent', below: 'rgba(229,57,53,0.38)' }
         : false;
 
     if ($legendPotentialWrap.length) {
         $legendPotentialWrap.css('display', displayPotential ? 'flex' : 'none');
     }
 
-    /* Total-loss fill remains available even when the dashed potential line is hidden. */
+    /* Total-loss fill available whenever any potential source is present. */
     var $tlWrap = $el.find('.js-legend-total-loss-wrap');
-    if ($tlWrap.length) $tlWrap.css('display', canModelPotential() ? 'flex' : 'none');
+    if ($tlWrap.length) $tlWrap.css('display', hasPotentialData() ? 'flex' : 'none');
 
     /* Setpoint legend visibility */
     if ($legendSetpoint && $legendSetpoint.length) {
@@ -1693,7 +1738,7 @@ function updateSummary(potentialKw, exportedKw, ceilingKw, bucketMs, capacityKw)
 
     var hPerBucket = bucketMs / 3600000;
     var dec        = parseInt(s.decimals) || 1;
-    var canPotential = canModelPotential();
+    var canPotential = hasPotentialData();
     var hasModeledPotential = canPotential && !!(potentialKw && potentialKw.some(function (v) { return v !== null; }));
 
     var totalExportedKWh  = 0;
@@ -1755,7 +1800,10 @@ function updateSummary(potentialKw, exportedKw, ceilingKw, bucketMs, capacityKw)
     }
 
     var statusStr = isLiveData ? 'Live' : 'Simulated';
-    var html = '<span class="sb-item sb-label">' + statusStr + '</span>';
+    var potSrcLabel = hasModeledPotential
+        ? (' · ' + (_tbPotentialAvailable ? 'TB Physics' : 'Sine Model'))
+        : '';
+    var html = '<span class="sb-item sb-label">' + statusStr + potSrcLabel + '</span>';
 
     if (hasModeledPotential && totalLossKWh > 0.001) {
         html += '<span class="sb-sep">|</span>';
@@ -1781,10 +1829,10 @@ function updateSummary(potentialKw, exportedKw, ceilingKw, bucketMs, capacityKw)
 
     if (!canPotential) {
         html += '<span class="sb-sep">|</span>';
-        html += '<span class="sb-item sb-muted">Potential model unavailable for this view</span>';
+        html += '<span class="sb-item sb-muted">No potential data — configure potential_power key or use day view for sine model</span>';
     } else if (!hasModeledPotential) {
         html += '<span class="sb-sep">|</span>';
-        html += '<span class="sb-item sb-muted">Potential model waiting for positive production data</span>';
+        html += '<span class="sb-item sb-muted">Waiting for potential data' + (!_tbPotentialAvailable && canModelPotential() ? ' (sine model needs production data)' : ' (no TB physics data in this window)') + '</span>';
     } else if (curtailedLossKWh <= 0.001 && totalLossKWh <= 0.001) {
         html += '<span class="sb-sep">|</span>';
         html += '<span class="sb-item sb-ok">No losses detected</span>';
@@ -1801,20 +1849,13 @@ self.onResize = function () {
         baseFontSize = Math.max(10, ($el.find('.curt-card').height() || 300) * 0.05);
         myChart.resize();
     }
-    if ($calendarOverlay && $calendarOverlay.length && $calendarOverlay.is(':visible')) {
-        positionCalendarOverlay();
-    }
 };
 
 self.onDestroy = function () {
     if (_fetchTimer) { clearTimeout(_fetchTimer); _fetchTimer = null; }
     if (myChart) { myChart.destroy(); myChart = null; }
     $(document).off('click.v5cal').off('click.v5dd');
-    $(window).off('resize.v5calpos scroll.v5calpos');
-    if ($calendarOverlay && $calendarOverlay.length) {
-        $calendarOverlay.remove();
-        _calendarPortalAttached = false;
-    }
+    restoreAncestorOverflows();
     $el.find('.js-dd-int-menu').off('click');
     $el.find('.js-dd-int-btn').off('click');
 };
