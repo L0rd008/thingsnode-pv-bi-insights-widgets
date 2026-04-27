@@ -119,7 +119,7 @@ function loadSettings() {
     var def = {
         timeframe:          'today',
         actualPowerKeys:    'active_power',
-        setpointKeys:       'setpoint_active_power, curtailment_limit',
+        setpointKeys:       'setpoint_active_power',
         potentialPowerKeys: 'potential_power',
         plantCapacityKey:   'Capacity',
         capacityUnit:       'kW',
