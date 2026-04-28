@@ -248,17 +248,18 @@
     --c-text: #FFFFFF;
     --c-text-dim: #B0BEC5;
     --c-text-muted: #90A4AE;
-    position: absolute;
-    top: 100%;
-    left: 50%;
-    transform: translateX(-50%);
+    position: fixed;
+    top: auto;
+    left: auto;
+    transform: none;
     background: rgba(5,20,52,0.98);
     border: 1px solid rgba(6,245,255,0.35);
     border-radius: 8px;
     padding: 8px;
     box-shadow: 0 8px 24px rgba(0,0,0,0.6);
     z-index: 9999;
-    width: min(280px, calc(100vw - 16px));
+    width: 280px;
+    max-width: calc(100vw - 16px);
     max-height: min(320px, calc(100vh - 16px));
     box-sizing: border-box;
     overflow-x: hidden;
@@ -266,6 +267,9 @@
     overscroll-behavior: contain;
     color: var(--c-text);
     font-family: Roboto, sans-serif;
+}
+.calendar-overlay.cal-open-above {
+    box-shadow: 0 -8px 24px rgba(0,0,0,0.55);
 }
 
 /* Calendar header (month + nav) */
@@ -430,6 +434,12 @@
 .sb-loss b { color: #FF5252; }
 .sb-pct   { color: #FF8A65; }
 .sb-pct b { color: #FF5252; font-size: 1.05em; }
+.sb-excess { color: #81C784; }
+.sb-excess b { color: #69F0AE; font-size: 1.05em; }
+.sb-net-loss { color: #FFD54F; }
+.sb-net-loss b { color: #FFC107; font-size: 1.05em; }
+.sb-net-gain { color: #69F0AE; }
+.sb-net-gain b { color: #00E676; font-size: 1.05em; }
 .sb-ok    { color: var(--c-good); }
 .sb-warn  { color: var(--c-warning); }
 .sb-muted { color: var(--c-text-muted); }
@@ -460,6 +470,7 @@
 .legend-block { width:0.6em; height:0.35em; border-radius:1px; }
 .legend-block.curtailed  { background-color: rgba(229,57,53,0.7); }
 .legend-block.total-loss { background-color: rgba(255,193,7,0.7); }
+.legend-block.excess     { background-color: rgba(76,175,80,0.75); }
 
 /* ─────────────────────────────
    SETTINGS BUTTON

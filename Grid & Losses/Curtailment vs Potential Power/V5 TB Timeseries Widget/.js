@@ -28,13 +28,13 @@
      When setpoint >= 100%: ceiling = null (not drawn)
      Visible curtailment limit line.
 
-   Dataset 3 — "Total Loss Fill"  (internal amber fill anchor)
-     Internal dataset that fills total-loss regions without
+   Dataset 3 — "Gross Loss Fill"  (internal amber fill anchor)
+     Internal dataset that fills gross-loss regions without
      overlapping the curtailment-loss region.
 
    Dataset 4 — "Curtailment Loss Fill"  (internal red fill anchor)
      Internal dataset that fills the gap between potential power
-     and the curtailment ceiling when potential > ceiling.
+     and max(curtailment ceiling, exported power).
 
    Dataset 5 — "Curtailment Markers"  (orange dots)
      Marks the first and last bucket of each curtailment event.
@@ -42,6 +42,10 @@
    Dataset 6 — "Setpoint Line"  (amber dashed stepped line)
      Shows the raw setpoint-derived allowed power level.
      Stepped (holds value until next change) for visual precision.
+
+   Dataset 7 — "Excess Fill"  (internal green fill anchor)
+     Internal dataset that fills regions where exported power
+     exceeds modeled potential power.
 
    Bucket strategy
    ───────────────
@@ -70,6 +74,7 @@ var _selectedDate = null;     /* null = use timeframe dropdown; Date = override 
 var _curtailedDays = {};      /* { 'YYYY-MM-DD': true } for calendar highlighting */
 var _calendarMonth = null;    /* { y, m } for calendar nav */
 var _savedOverflows = [];     /* ancestor overflow values saved while calendar is open */
+var _calendarRepositionHandler = null;
 var _intervalOverrideMs = null; /* null = auto (timeframe-based); number = manual override in ms */
 var _tbPotentialAvailable = false; /* true when valid TB physics data found for the current period */
 
@@ -308,6 +313,14 @@ function bindDateNav() {
     $calendarOverlay.on('click', function (e) {
         e.stopPropagation();
     });
+
+    _calendarRepositionHandler = function () {
+        if ($calendarOverlay && $calendarOverlay.is(':visible')) {
+            positionCalendarOverlay();
+        }
+    };
+    $(window).on('resize.v5cal scroll.v5cal', _calendarRepositionHandler);
+    document.addEventListener('scroll', _calendarRepositionHandler, true);
 }
 
 function getSelectedDateObj() {
@@ -358,11 +371,10 @@ function updateDateLabel() {
 /* ────────────────────────────────────────────────────
    CALENDAR OVERLAY  [F3] — overflow-escape approach
    ────────────────────────────────────────────────────
-   The calendar sits inside .date-nav (position:relative)
-   as position:absolute. To prevent clipping by .curt-card
-   or any ThingsBoard parent container, we temporarily set
-   overflow:visible on all ancestors while the calendar is
-   open, then restore on close.
+   The calendar sits inside .date-nav but is positioned from
+   viewport coordinates. It can flip above the date label and
+   shrink/scroll in short widgets while still using the existing
+   overflow escape guard for ThingsBoard containers.
    ──────────────────────────────────────────────────── */
 function toggleCalendar() {
     if ($calendarOverlay.is(':visible')) {
@@ -373,7 +385,9 @@ function toggleCalendar() {
 }
 
 function closeCalendar() {
-    $calendarOverlay.hide();
+    $calendarOverlay.hide()
+        .removeClass('cal-open-above cal-open-below')
+        .css({ visibility: '', top: '', left: '', width: '', maxHeight: '' });
     restoreAncestorOverflows();
 }
 
@@ -412,12 +426,59 @@ function restoreAncestorOverflows() {
     _savedOverflows = [];
 }
 
+function positionCalendarOverlay() {
+    if (!$calendarOverlay.length || !$dateLabelEl.length) return;
+
+    var labelEl = $dateLabelEl[0];
+    var rect = labelEl.getBoundingClientRect();
+    var viewportW = window.innerWidth || document.documentElement.clientWidth || 320;
+    var viewportH = window.innerHeight || document.documentElement.clientHeight || 240;
+    var margin = 8;
+    var gap = 6;
+    var minHeight = Math.min(120, Math.max(72, viewportH - (margin * 2)));
+    var desiredMaxHeight = Math.min(320, Math.max(minHeight, viewportH - (margin * 2)));
+
+    var belowSpace = viewportH - rect.bottom - margin - gap;
+    var aboveSpace = rect.top - margin - gap;
+    var openAbove = aboveSpace > belowSpace && belowSpace < desiredMaxHeight;
+    var available = openAbove ? aboveSpace : belowSpace;
+
+    if (available < minHeight && Math.max(aboveSpace, belowSpace) > available) {
+        openAbove = aboveSpace > belowSpace;
+        available = openAbove ? aboveSpace : belowSpace;
+    }
+
+    var maxHeight = Math.min(320, Math.max(minHeight, available));
+    var width = Math.min(280, Math.max(220, viewportW - (margin * 2)));
+    var left = rect.left + (rect.width / 2) - (width / 2);
+    left = Math.max(margin, Math.min(left, viewportW - margin - width));
+
+    $calendarOverlay
+        .toggleClass('cal-open-above', openAbove)
+        .toggleClass('cal-open-below', !openAbove)
+        .css({
+            width: width + 'px',
+            maxHeight: maxHeight + 'px',
+            left: left + 'px'
+        });
+
+    var actualHeight = Math.min($calendarOverlay.outerHeight() || maxHeight, maxHeight);
+    var top = openAbove
+        ? rect.top - gap - actualHeight
+        : rect.bottom + gap;
+    top = Math.max(margin, Math.min(top, viewportH - margin - actualHeight));
+
+    $calendarOverlay.css({ top: top + 'px' });
+}
+
 function openCalendar() {
     var sel = getSelectedDateObj();
     _calendarMonth = { y: sel.getFullYear(), m: sel.getMonth() };
     renderCalendar();
     clearAncestorOverflows();
-    $calendarOverlay.show();
+    $calendarOverlay.css({ visibility: 'hidden', display: 'block' });
+    positionCalendarOverlay();
+    $calendarOverlay.css('visibility', 'visible');
     /* Trigger curtailed-day fetch for the displayed month */
     fetchCurtailedDaysForMonth(_calendarMonth.y, _calendarMonth.m);
 }
@@ -497,6 +558,7 @@ function renderCalendar() {
         _calendarMonth.m--;
         if (_calendarMonth.m < 0) { _calendarMonth.m = 11; _calendarMonth.y--; }
         renderCalendar();
+        positionCalendarOverlay();
         fetchCurtailedDaysForMonth(_calendarMonth.y, _calendarMonth.m);
     });
 
@@ -506,6 +568,7 @@ function renderCalendar() {
         _calendarMonth.m++;
         if (_calendarMonth.m > 11) { _calendarMonth.m = 0; _calendarMonth.y++; }
         renderCalendar();
+        positionCalendarOverlay();
         fetchCurtailedDaysForMonth(_calendarMonth.y, _calendarMonth.m);
     });
 }
@@ -556,7 +619,10 @@ function fetchCurtailedDaysForMonth(y, mo) {
                 }
             }
             /* Re-render calendar with highlights */
-            if ($calendarOverlay.is(':visible')) renderCalendar();
+            if ($calendarOverlay.is(':visible')) {
+                renderCalendar();
+                positionCalendarOverlay();
+            }
         }, function() { /* ignore errors */ });
     } catch(e) {}
 }
@@ -770,7 +836,7 @@ function initChart() {
                     fill: false,
                     order: 5
                 },
-                /* 3 — Total Loss Fill (internal, invisible border) */
+                /* 3 — Gross Loss Fill (internal, invisible border) */
                 {
                     label: '_total_fill',
                     data: [],
@@ -826,6 +892,20 @@ function initChart() {
                     fill: false,
                     spanGaps: true,
                     order: 3
+                },
+                /* 7 — Excess Fill (internal, invisible border) */
+                {
+                    label: '_excess_fill',
+                    data: [],
+                    borderColor: 'transparent',
+                    backgroundColor: 'transparent',
+                    borderWidth: 0,
+                    pointRadius: 0,
+                    pointHoverRadius: 0,
+                    tension: 0.35,
+                    spanGaps: false,
+                    fill: { target: 1, above: 'transparent', below: 'rgba(76,175,80,0.34)' },
+                    order: 1
                 }
             ]
         },
@@ -856,14 +936,14 @@ function initChart() {
                     padding: { top: 6, right: 10, bottom: 6, left: 10 },
                     displayColors: false,
                     filter: function (item) {
-                        if (item.datasetIndex === 3 || item.datasetIndex === 4 || item.datasetIndex === 5) return false;
+                        if (item.datasetIndex === 3 || item.datasetIndex === 4 || item.datasetIndex === 5 || item.datasetIndex === 7) return false;
                         if (item.datasetIndex === 0 && !shouldDisplayPotential()) return false;
                         return true;
                     },
                     callbacks: {
                         title: function (items) { return items.length ? items[0].label : ''; },
                         label: function (ctx2) {
-                            if (ctx2.datasetIndex === 3 || ctx2.datasetIndex === 4 || ctx2.datasetIndex === 5) return null;
+                            if (ctx2.datasetIndex === 3 || ctx2.datasetIndex === 4 || ctx2.datasetIndex === 5 || ctx2.datasetIndex === 7) return null;
                             if (ctx2.datasetIndex === 0 && !shouldDisplayPotential()) return null;
                             if (ctx2.parsed.y == null) return null;
                             var dec2 = parseInt(s.decimals) || 1;
@@ -879,13 +959,16 @@ function initChart() {
                             var dec2 = parseInt(s.decimals) || 1;
                             var unit = getDisplayUnit();
                             var lines = [];
-                            if (canModelPotential() && potV != null && eVal != null) {
+                            if (hasPotentialData() && potV != null && eVal != null) {
                                 var tl = Math.max(potV - eVal, 0);
-                                if (tl >= 0.01) lines.push('⚡ Total Loss: ' + tl.toFixed(dec2) + ' ' + unit);
+                                var excess = Math.max(eVal - potV, 0);
+                                if (tl >= 0.01) lines.push('Gross Loss: ' + tl.toFixed(dec2) + ' ' + unit);
+                                if (excess >= 0.01) lines.push('Excess: ' + excess.toFixed(dec2) + ' ' + unit);
                             }
-                            if (canModelPotential() && potV != null && ceil != null) {
-                                var cl = Math.max(potV - ceil, 0);
-                                if (cl >= 0.01) lines.push('⚠ Curtailed Loss: ' + cl.toFixed(dec2) + ' ' + unit);
+                            if (hasPotentialData() && potV != null && ceil != null) {
+                                var curtailBase = (eVal != null) ? Math.max(ceil, eVal) : ceil;
+                                var cl = Math.max(potV - curtailBase, 0);
+                                if (cl >= 0.01) lines.push('Curtailed Loss: ' + cl.toFixed(dec2) + ' ' + unit);
                             }
                             return lines.length ? lines.join('\n') : '';
                         }
@@ -1053,9 +1136,9 @@ function buildTotalLossFillSeries(potentialKw, exportedKw, ceilingKw) {
     var fill = new Array(len).fill(null);
 
     for (var i = 0; i < fill.length; i++) {
-        var potV = potentialKw[i];
-        var expV = exportedKw[i];
-        var ceilV = ceilingKw[i];
+        var potV = (potentialKw && i < potentialKw.length) ? potentialKw[i] : null;
+        var expV = (exportedKw && i < exportedKw.length) ? exportedKw[i] : null;
+        var ceilV = (ceilingKw && i < ceilingKw.length) ? ceilingKw[i] : null;
 
         if (potV == null || expV == null || potV <= expV) continue;
 
@@ -1068,13 +1151,34 @@ function buildTotalLossFillSeries(potentialKw, exportedKw, ceilingKw) {
     return fill;
 }
 
-function buildCurtailmentFillSeries(potentialKw, ceilingKw) {
-    var fill = new Array(Math.max(potentialKw.length, ceilingKw.length)).fill(null);
+function buildCurtailmentFillSeries(potentialKw, exportedKw, ceilingKw) {
+    var fill = new Array(Math.max(
+        (potentialKw || []).length,
+        (exportedKw || []).length,
+        (ceilingKw || []).length
+    )).fill(null);
     for (var i = 0; i < fill.length; i++) {
-        var potV = potentialKw[i];
-        var ceilV = ceilingKw[i];
+        var potV = (potentialKw && i < potentialKw.length) ? potentialKw[i] : null;
+        var expV = (exportedKw && i < exportedKw.length) ? exportedKw[i] : null;
+        var ceilV = (ceilingKw && i < ceilingKw.length) ? ceilingKw[i] : null;
         if (potV != null && ceilV != null && potV > ceilV) {
-            fill[i] = ceilV;
+            var bottom = (expV != null) ? Math.max(ceilV, expV) : ceilV;
+            if (potV > bottom) fill[i] = bottom;
+        }
+    }
+    return fill;
+}
+
+function buildExcessFillSeries(potentialKw, exportedKw) {
+    var fill = new Array(Math.max(
+        (potentialKw || []).length,
+        (exportedKw || []).length
+    )).fill(null);
+    for (var i = 0; i < fill.length; i++) {
+        var potV = (potentialKw && i < potentialKw.length) ? potentialKw[i] : null;
+        var expV = (exportedKw && i < exportedKw.length) ? exportedKw[i] : null;
+        if (potV != null && expV != null && expV > potV) {
+            fill[i] = potV;
         }
     }
     return fill;
@@ -1596,9 +1700,10 @@ function processLiveTimeSeries(rawData, minTime, maxTime, bucketMs, historyPower
     }
 
     var dataTotalLossFillKw = buildTotalLossFillSeries(dataPotentialKw, dataExportedKw, dataCurtailCeilKw);
-    var dataCurtailFillKw = buildCurtailmentFillSeries(dataPotentialKw, dataCurtailCeilKw);
+    var dataCurtailFillKw = buildCurtailmentFillSeries(dataPotentialKw, dataExportedKw, dataCurtailCeilKw);
+    var dataExcessFillKw = buildExcessFillSeries(dataPotentialKw, dataExportedKw);
 
-    renderChartData(labels, dataPotentialKw, dataExportedKw, dataCurtailCeilKw, dataTotalLossFillKw, dataCurtailFillKw, dataMarkersKw, dataSetpointKw, capacityKw);
+    renderChartData(labels, dataPotentialKw, dataExportedKw, dataCurtailCeilKw, dataTotalLossFillKw, dataCurtailFillKw, dataExcessFillKw, dataMarkersKw, dataSetpointKw, capacityKw);
     updateSummary(dataPotentialKw, dataExportedKw, dataCurtailCeilKw, bucketMs, capacityKw);
 }
 
@@ -1664,9 +1769,10 @@ function loadSimulation(minTime, maxTime, bucketMs) {
     }
 
     var totalLossFill = buildTotalLossFillSeries(potential, exported, ceiling);
-    var curtailFill = buildCurtailmentFillSeries(potential, ceiling);
+    var curtailFill = buildCurtailmentFillSeries(potential, exported, ceiling);
+    var excessFill = buildExcessFillSeries(potential, exported);
 
-    renderChartData(labels, potential, exported, ceiling, totalLossFill, curtailFill, markers, setpointLine, capacityKw);
+    renderChartData(labels, potential, exported, ceiling, totalLossFill, curtailFill, excessFill, markers, setpointLine, capacityKw);
     updateSummary(potential, exported, ceiling, bucketMs, capacityKw);
 }
 
@@ -1682,7 +1788,7 @@ function renderNoData() {
     }
 }
 
-function renderChartData(labels, potentialKw, exportedKw, ceilingKw, totalLossFillKw, curtailFillKw, markersKw, setpointDataKw, capacityKw) {
+function renderChartData(labels, potentialKw, exportedKw, ceilingKw, totalLossFillKw, curtailFillKw, excessFillKw, markersKw, setpointDataKw, capacityKw) {
     if (!myChart) return;
 
     var displayPotential = shouldDisplayPotential();
@@ -1691,6 +1797,7 @@ function renderChartData(labels, potentialKw, exportedKw, ceilingKw, totalLossFi
     var ceilingDisplay   = toDisplaySeries(ceilingKw);
     var totalFillDisplay = toDisplaySeries(totalLossFillKw);
     var curtailFillDisplay = toDisplaySeries(curtailFillKw);
+    var excessFillDisplay = toDisplaySeries(excessFillKw);
     var markersDisplay   = toDisplaySeries(markersKw);
     var setpointDisplay  = toDisplaySeries(setpointDataKw || []);
 
@@ -1702,6 +1809,7 @@ function renderChartData(labels, potentialKw, exportedKw, ceilingKw, totalLossFi
     myChart.data.datasets[4].data = curtailFillDisplay;
     myChart.data.datasets[5].data = markersDisplay;
     myChart.data.datasets[6].data = setpointDisplay;
+    myChart.data.datasets[7].data = excessFillDisplay;
 
     myChart.data.datasets[0].borderColor = displayPotential ? 'rgba(255,255,255,0.55)' : 'transparent';
     myChart.data.datasets[0].fill = false;
@@ -1714,6 +1822,9 @@ function renderChartData(labels, potentialKw, exportedKw, ceilingKw, totalLossFi
     myChart.data.datasets[4].fill = hasPotentialData()
         ? { target: 0, above: 'transparent', below: 'rgba(229,57,53,0.38)' }
         : false;
+    myChart.data.datasets[7].fill = hasPotentialData()
+        ? { target: 1, above: 'transparent', below: 'rgba(76,175,80,0.34)' }
+        : false;
 
     if ($legendPotentialWrap.length) {
         $legendPotentialWrap.css('display', displayPotential ? 'flex' : 'none');
@@ -1722,6 +1833,9 @@ function renderChartData(labels, potentialKw, exportedKw, ceilingKw, totalLossFi
     /* Total-loss fill available whenever any potential source is present. */
     var $tlWrap = $el.find('.js-legend-total-loss-wrap');
     if ($tlWrap.length) $tlWrap.css('display', hasPotentialData() ? 'flex' : 'none');
+
+    var $exWrap = $el.find('.js-legend-excess-wrap');
+    if ($exWrap.length) $exWrap.css('display', hasPotentialData() ? 'flex' : 'none');
 
     /* Setpoint legend visibility */
     if ($legendSetpoint && $legendSetpoint.length) {
@@ -1744,6 +1858,7 @@ function updateSummary(potentialKw, exportedKw, ceilingKw, bucketMs, capacityKw)
     var totalExportedKWh  = 0;
     var curtailedLossKWh  = 0;
     var totalLossKWh      = 0;
+    var excessKWh         = 0;
     var totalPotentialKWh = 0;
     var curtBuckets       = 0;
     var activeBuckets     = 0;
@@ -1770,10 +1885,12 @@ function updateSummary(potentialKw, exportedKw, ceilingKw, bucketMs, capacityKw)
 
         if (hasModeledPotential && potV != null && expV != null) {
             totalLossKWh += Math.max(potV - expV, 0) * hPerBucket;
+            excessKWh += Math.max(expV - potV, 0) * hPerBucket;
         }
 
         if (hasModeledPotential && potV != null && ceilV != null) {
-            var cLossKw = Math.max(potV - ceilV, 0);
+            var curtailBaseKw = (expV != null) ? Math.max(ceilV, expV) : ceilV;
+            var cLossKw = Math.max(potV - curtailBaseKw, 0);
             if (cLossKw > 0) {
                 curtailedLossKWh += cLossKw * hPerBucket;
                 curtBuckets++;
@@ -1788,6 +1905,9 @@ function updateSummary(potentialKw, exportedKw, ceilingKw, bucketMs, capacityKw)
     var totalLossDisp    = getEnergyDisplay(totalLossKWh);
     var curtLossDisp     = getEnergyDisplay(curtailedLossKWh);
     var curtMarginDisp   = getEnergyDisplay(curtMarginKWh);
+    var excessDisp       = getEnergyDisplay(excessKWh);
+    var netLossKWh       = totalLossKWh - excessKWh;
+    var netDisp          = getEnergyDisplay(Math.abs(netLossKWh));
     var exportedDisp     = getEnergyDisplay(totalExportedKWh);
 
     var curtPct = '0.0';
@@ -1807,13 +1927,33 @@ function updateSummary(potentialKw, exportedKw, ceilingKw, bucketMs, capacityKw)
 
     if (hasModeledPotential && totalLossKWh > 0.001) {
         html += '<span class="sb-sep">|</span>';
-        html += '<span class="sb-item" style="color:#FFC107;">Total Loss: <b>' +
+        html += '<span class="sb-item" style="color:#FFC107;">Gross Loss: <b>' +
                 totalLossDisp.value.toFixed(dec) + ' ' + totalLossDisp.unit + '</b></span>';
         if (totalPotentialKWh > 0) {
             var totalPct = ((totalLossKWh / totalPotentialKWh) * 100).toFixed(1);
             html += '<span class="sb-sep">|</span>';
             html += '<span class="sb-item sb-pct" style="color:#FFD54F;"><b>' + totalPct + '%</b> of potential</span>';
         }
+    }
+
+    if (hasModeledPotential && excessKWh > 0.001) {
+        html += '<span class="sb-sep">|</span>';
+        html += '<span class="sb-item sb-excess">Excess: <b>' +
+                excessDisp.value.toFixed(dec) + ' ' + excessDisp.unit + '</b></span>';
+        if (totalPotentialKWh > 0) {
+            var excessPct = ((excessKWh / totalPotentialKWh) * 100).toFixed(1);
+            html += '<span class="sb-sep">|</span>';
+            html += '<span class="sb-item sb-excess"><b>' + excessPct + '%</b> of potential</span>';
+        }
+    }
+
+    if (hasModeledPotential && (totalLossKWh > 0.001 || excessKWh > 0.001)) {
+        var isNetGain = netLossKWh < -0.001;
+        var netLabel = isNetGain ? 'Net Gain' : 'Net Loss';
+        var netClass = isNetGain ? 'sb-net-gain' : 'sb-net-loss';
+        html += '<span class="sb-sep">|</span>';
+        html += '<span class="sb-item ' + netClass + '">' + netLabel + ': <b>' +
+                netDisp.value.toFixed(dec) + ' ' + netDisp.unit + '</b></span>';
     }
 
     if (hasModeledPotential && curtailedLossKWh > 0.001) {
@@ -1833,7 +1973,7 @@ function updateSummary(potentialKw, exportedKw, ceilingKw, bucketMs, capacityKw)
     } else if (!hasModeledPotential) {
         html += '<span class="sb-sep">|</span>';
         html += '<span class="sb-item sb-muted">Waiting for potential data' + (!_tbPotentialAvailable && canModelPotential() ? ' (sine model needs production data)' : ' (no TB physics data in this window)') + '</span>';
-    } else if (curtailedLossKWh <= 0.001 && totalLossKWh <= 0.001) {
+    } else if (curtailedLossKWh <= 0.001 && totalLossKWh <= 0.001 && excessKWh <= 0.001) {
         html += '<span class="sb-sep">|</span>';
         html += '<span class="sb-item sb-ok">No losses detected</span>';
     }
@@ -1849,12 +1989,20 @@ self.onResize = function () {
         baseFontSize = Math.max(10, ($el.find('.curt-card').height() || 300) * 0.05);
         myChart.resize();
     }
+    if ($calendarOverlay && $calendarOverlay.is(':visible')) {
+        positionCalendarOverlay();
+    }
 };
 
 self.onDestroy = function () {
     if (_fetchTimer) { clearTimeout(_fetchTimer); _fetchTimer = null; }
     if (myChart) { myChart.destroy(); myChart = null; }
     $(document).off('click.v5cal').off('click.v5dd');
+    $(window).off('.v5cal');
+    if (_calendarRepositionHandler) {
+        document.removeEventListener('scroll', _calendarRepositionHandler, true);
+        _calendarRepositionHandler = null;
+    }
     restoreAncestorOverflows();
     $el.find('.js-dd-int-menu').off('click');
     $el.find('.js-dd-int-btn').off('click');
