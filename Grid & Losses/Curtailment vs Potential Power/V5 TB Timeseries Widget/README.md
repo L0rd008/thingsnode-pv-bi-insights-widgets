@@ -92,10 +92,10 @@ only.
 - Clicking the **date label** opens a custom calendar popup.
 - Future dates cannot be selected.
 - Calendar days with daylight curtailment events are highlighted in amber.
-- The calendar is opened by temporarily setting `overflow: visible` on all ancestor elements so it
-  can escape the clipped widget card — ancestor styles are restored when the calendar closes.
-  (Previous approach used `position: fixed` + dynamic viewport arithmetic, which was removed in
-  favour of this simpler, more reliable overflow-escape technique.)
+- The calendar is positioned from the date label's viewport coordinates, flips above the label
+  when needed, and scrolls internally in short widget/browser heights.
+- Ancestor `overflow` styles are still temporarily set to `visible` while the calendar is open and
+  restored on close so ThingsBoard containers do not clip the popup.
 
 ---
 
@@ -106,26 +106,31 @@ only.
 | 0 | Potential Power | White dashed line | Shown on all views when TB physics data available; day views only for half-sine fallback |
 | 1 | Exported Power | Cyan solid line | Always shown |
 | 2 | Curtailment Limit | Orange dashed line | Drawn when setpoint < 99.5% |
-| 3 | Total Loss Fill | Internal amber fill | Fills between exported power and the potential ceiling (non-curtailed gap) |
-| 4 | Curtailment Loss Fill | Internal red fill | Fills from curtailment ceiling **down to** the potential line (red band above ceiling) |
+| 3 | Gross Loss Fill | Internal amber fill | Fills between exported power and the potential/curtailment split point |
+| 4 | Curtailment Loss Fill | Internal red fill | Fills from max(curtailment ceiling, exported power) **down to** the potential line |
 | 5 | Curtailment Markers | Orange dots | First and last bucket of each curtailment event |
 | 6 | Setpoint Limit | Amber dashed stepped line | Holds the raw setpoint-derived power level; `stepped: 'before'` |
+| 7 | Excess Fill | Internal green fill | Fills between potential power and exported power when export exceeds potential |
 
 > **Fill direction note:** Dataset 3 fills `above: amber` relative to dataset 1 (Exported Power).
 > Dataset 4 fills `below: red` relative to dataset 0 (Potential Power), i.e. the region between
-> the potential curve and the curtailment ceiling.
+> the potential curve and the capped curtailment-loss floor. Dataset 7 fills `below: green`
+> relative to dataset 1, i.e. the excess region between potential and export.
 
 ---
 
 ## 5) Calculations
 
 - `Curtailment Ceiling = Capacity × (Setpoint% / 100)` when setpoint < 99.5%.
-- `Total Loss per bucket = max(Potential − Exported, 0) × bucketHours`.
-- `Curtailed Loss per bucket = max(Potential − Curtailment Ceiling, 0) × bucketHours`.
+- `Gross Loss per bucket = max(Potential − Exported, 0) × bucketHours`.
+- `Excess per bucket = max(Exported − Potential, 0) × bucketHours`.
+- `Net Loss = Gross Loss − Excess`; negative net values are shown as **Net Gain**.
+- `Curtailed Loss per bucket = max(Potential − max(Curtailment Ceiling, Exported), 0) × bucketHours`.
 - During curtailed intervals the fills are split into two non-overlapping regions: amber for
-  `Exported → Ceiling` and red for `Ceiling → Potential`.
+  `Exported → Ceiling` when export is below the ceiling, and red for
+  `max(Ceiling, Exported) → Potential`.
 - Actual power is allowed to exceed the modeled potential curve. Losses are clamped at zero
-  instead of forcing the model upward.
+  instead of forcing the model upward, and the excess is shown as a green region.
 - Setpoint uses **step-hold interpolation** with a 30-day lookback before `startTs`.
 - If measured export exceeds configured capacity, the widget **auto-scales** capacity upward to
   avoid chart clipping (rounded up to the nearest 100 kW).
@@ -165,10 +170,12 @@ The summary bar can show (all separated by `|`):
 | Token | Shown when |
 |---|---|
 | Live / Simulated · TB Physics / Sine Model | Always |
-| Total Loss (value + % of potential) | Potential modeled and loss > 0 |
+| Gross Loss (value + % of potential) | Potential modeled and gross loss > 0 |
+| Excess (value + % of potential) | Potential modeled and export exceeds potential |
+| Net Loss / Net Gain | Potential modeled and either gross loss or excess exists |
 | Curtailed Loss (value ± margin + % of potential) | Curtailment detected |
 | Hours curtailed | Curtailment detected |
-| No losses detected | Potential modeled but zero loss |
+| No losses detected | Potential modeled but zero gross loss and zero excess |
 | Potential model unavailable message | Non-day view with no TB physics data |
 | Exported energy | Always |
 
