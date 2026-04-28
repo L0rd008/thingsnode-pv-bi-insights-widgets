@@ -8,9 +8,10 @@
       { "value": "grid", "label": "Grid Availability Impact Loss" },
       { "value": "curtail", "label": "Curtailment Loss" },
       { "value": "revenue", "label": "Revenue Loss (Potential)" },
-      { "value": "insurance", "label": "Insurance Claimable Loss" }
+      { "value": "insurance", "label": "Insurance Claimable Loss" },
+      { "value": "rangeSelector", "label": "Shared Range Selector" }
     ],
-    "helpText": "Selects the loss type. Each mode sets its own accent color, icon, and default labels."
+    "helpText": "grid, curtail, and revenue can compute from potential_power for the shared range. insurance keeps the latest-value path."
   },
   {
     "id": "customTitle",
@@ -50,16 +51,84 @@
     "step": 1
   },
   {
+    "id": "actualPowerKeys",
+    "name": "Actual Power Keys",
+    "type": "text",
+    "default": "active_power",
+    "helpText": "Comma-separated telemetry keys for exported/actual power in kW."
+  },
+  {
+    "id": "setpointKeys",
+    "name": "Setpoint Keys",
+    "type": "text",
+    "default": "setpoint_active_power, curtailment_limit, power_limit",
+    "helpText": "Comma-separated setpoint keys. Values below 99.5 percent create curtailment ceilings."
+  },
+  {
+    "id": "potentialPowerKeys",
+    "name": "Potential Power Keys",
+    "type": "text",
+    "default": "potential_power",
+    "helpText": "Comma-separated potential-power telemetry keys in kW. Negative values are ignored."
+  },
+  {
+    "id": "tariffAttributeKey",
+    "name": "Tariff Attribute Key",
+    "type": "text",
+    "default": "tariff_rate_lkr",
+    "helpText": "Plant attribute in LKR/kWh. SERVER_SCOPE is read first, then SHARED_SCOPE."
+  },
+  {
+    "id": "plantCapacityKey",
+    "name": "Capacity Attribute Key",
+    "type": "text",
+    "default": "Capacity",
+    "helpText": "Plant capacity attribute used for curtailment ceiling calculations."
+  },
+  {
+    "id": "capacityUnit",
+    "name": "Capacity Unit",
+    "type": "select",
+    "default": "kW",
+    "items": [
+      { "value": "kW", "label": "kW" },
+      { "value": "MW", "label": "MW" }
+    ]
+  },
+  {
+    "id": "fallbackPower",
+    "name": "Fallback Capacity (kW)",
+    "type": "number",
+    "default": 1000,
+    "min": 0,
+    "step": 1,
+    "helpText": "Used when the capacity attribute is missing or invalid."
+  },
+  {
+    "id": "lifetimeStartAttributeKey",
+    "name": "Lifetime Start Attribute Key",
+    "type": "text",
+    "default": "commissioning_date",
+    "helpText": "Reserved for plant COD/commissioning date. The selector falls back to Lifetime Start Date."
+  },
+  {
+    "id": "lifetimeStartDate",
+    "name": "Lifetime Start Date",
+    "type": "text",
+    "default": "2020-10-01",
+    "helpText": "Fallback lifetime start date in YYYY-MM-DD format."
+  },
+  {
     "id": "severityMedium",
     "name": "Severity: Medium Threshold",
     "type": "number",
-    "helpText": "Value at or above this is 'MODERATE'. Defaults: 100 for energy modes, 50000 for financial modes."
+    "helpText": "Value at or above this is MODERATE. Defaults: 100 for energy modes, 50000 for financial modes."
   },
   {
     "id": "severityHigh",
     "name": "Severity: High Threshold",
     "type": "number",
-    "helpText": "Value at or above this is 'HIGH'. Defaults: 500 for energy modes, 200000 for financial modes."
+    "helpText": "Value at or above this is HIGH. Defaults: 500 for energy modes, 200000 for financial modes."
   },
   {
     "id": "tooltipText",

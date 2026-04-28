@@ -1,6 +1,5 @@
 <div class="loss-card">
 
-    <!-- ═══ HEADER ═══ -->
     <div class="card-header">
         <div class="card-title js-title">--</div>
         <div class="header-right">
@@ -10,18 +9,37 @@
         </div>
     </div>
 
-    <!-- ═══ BODY ═══ -->
-    <div class="card-body">
+    <div class="card-body metric-body js-metric-body">
         <span class="main-value skeleton js-value">--</span>
         <span class="sub-text js-sub">--</span>
     </div>
 
-    <!-- ═══ FOOTER ═══ -->
-    <div class="card-footer">
-        <span class="footer-label js-footer-label">--</span>
+    <div class="selector-body js-selector-body">
+        <div class="range-label js-range-label">Current Month</div>
+        <div class="range-chips">
+            <button class="range-chip js-range-chip" data-range-mode="day" type="button">D</button>
+            <button class="range-chip js-range-chip" data-range-mode="month" type="button">M</button>
+            <button class="range-chip js-range-chip" data-range-mode="year" type="button">Y</button>
+            <button class="range-chip js-range-chip" data-range-mode="lifetime" type="button">Life</button>
+            <button class="range-chip js-range-chip" data-range-mode="custom" type="button">Custom</button>
+        </div>
+        <div class="range-input-row">
+            <input class="range-input js-day-input" type="date" />
+            <input class="range-input js-month-input" type="month" />
+            <input class="range-input js-year-input" type="number" min="1990" max="2100" step="1" />
+            <input class="range-input custom-date js-custom-start" type="date" />
+            <input class="range-input custom-date js-custom-end" type="date" />
+        </div>
     </div>
 
-    <!-- ═══ TOOLTIP — Glassmorphism ═══ -->
+    <div class="card-footer">
+        <span class="footer-label js-footer-label">--</span>
+        <span class="delta-container js-delta">
+            <span class="delta-value js-delta-value">--%</span>
+            <span class="delta-label js-delta-label"></span>
+        </span>
+    </div>
+
     <div class="tooltip-container">
         <div class="tooltip-content js-tooltip"></div>
     </div>
