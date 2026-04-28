@@ -1,59 +1,75 @@
 # Loss Attribution - Quick Read and Setup
 
-## 0) What this means in a PV plant
-- This card tracks one selected loss channel so teams can separate operational energy losses from financial losses.
-- Modes map to common PV loss reporting buckets:
-  - Grid outage loss
-  - Curtailment loss
-  - Revenue loss potential
-  - Insurance-claimable loss
+## What It Does
 
-## 1) Modes and calculations
-| Mode | Input meaning | Display logic | Default thresholds (raw value) |
-|---|---|---|---|
-| `grid` | Energy lost due to grid outage | `autoScale(value)` + `energyUnit` | medium 100, high 500 |
-| `curtail` | Energy curtailed | `autoScale(value)` + `energyUnit` | medium 100, high 500 |
-| `revenue` | Financial revenue loss | `currencySym + autoScale(value)` | medium 50000, high 200000 |
-| `insurance` | Claimable financial loss | `currencySym + autoScale(value)` | medium 50000, high 200000 |
+This widget has two jobs:
 
-Severity rule for all modes:
-- `< medium` -> `LOW`
-- `>= medium and < high` -> `MODERATE`
-- `>= high` -> `HIGH`
+- In `grid`, `curtail`, and `revenue` modes it can compute the selected range directly from plant telemetry: `active_power`, `potential_power`, setpoint, capacity, and tariff.
+- In `rangeSelector` mode it becomes a compact shared time-range control for every Loss Attribution card on the dashboard.
 
-## 2) Telemetry requirements and datasource order
-- Required:
-  - `DS[0]` numeric value for the selected mode
-- Additional datasources are ignored.
-- Order matters because code reads `self.ctx.data[0]` only.
+The original latest-value behavior remains the fallback. If telemetry, entity context, or tariff is missing, the widget reads `DS[0]` exactly like the older card.
 
-## 3) Units (input vs output)
-- Energy modes:
-  - Input: energy quantity in your chosen basis
-  - Output: `autoScale + energyUnit` (default `MWh`)
-- Financial modes:
-  - Input: currency value
-  - Output: `currencySym + autoScale`
-- `decimals` only affects non-financial mode formatting; financial formatting uses 0 decimals in code.
+## Modes
 
-## 4) ThingsBoard setup checklist
-1. Add widget as `Latest values`.
-2. Map one telemetry key as first datasource key.
-3. Pick `cardMode`.
-4. Set `energyUnit` or `currencySym` as needed.
-5. Adjust `severityMedium`/`severityHigh` for your alert policy.
+| Mode | Computed value | Display |
+|---|---|---|
+| `grid` | `sum(max(potential_power - active_power, 0))` | MWh |
+| `curtail` | `sum(max(potential_power - max(curtailment ceiling, active_power), 0))` when setpoint `< 99.5` | MWh |
+| `revenue` | grid gross loss kWh times `tariff_rate_lkr` | LKR |
+| `insurance` | unchanged latest-value fallback | LKR |
+| `rangeSelector` | writes `LossAttributionRange` dashboard state | compact selector |
 
-## 5) Example telemetry
+## Shared Range State
+
+The selector writes this dashboard state parameter:
+
 ```json
 {
-  "ts": 1774137600000,
-  "values": {
-    "grid_loss_mwh": 42.5,
-    "curtailment_loss_mwh": 88.3,
-    "revenue_loss_lkr": 1750000,
-    "insurance_claimable_lkr": 650000
-  }
+  "mode": "day | month | year | lifetime | custom",
+  "startTs": 1774972800000,
+  "endTs": 1777651199999,
+  "label": "Current Month",
+  "updatedAt": 1774972800000
 }
 ```
 
-Use one key per widget instance depending on selected mode.
+Normal cards read `LossAttributionRange`; if it is missing, they default to current month-to-date.
+
+## Comparison Delta
+
+The small footer delta compares normalized loss rate:
+
+```text
+lossRate = lossKWh / potentialEnergyKWh
+```
+
+Lower loss rate is green, higher loss rate is red, and near-equal values are gray.
+
+- Current day/month/year compares to the previous day/month/year.
+- Past day/month/year compares to the current day/month/year.
+- Custom range compares to the immediately preceding equal-length range.
+- Lifetime does not show a delta.
+
+## Query Behavior
+
+Power and potential telemetry use the same safe query rule as the V5 chart: `AVG` is used when the selected bucket count is 720 or less, and larger ranges fall back to raw chunked reads with client-side bucketing. Setpoint telemetry is fetched raw with a 30-day lookback for step-hold behavior.
+
+## ThingsBoard Setup
+
+1. Add one copied Loss Attribution instance and set `cardMode = rangeSelector`.
+2. Keep the normal card instances as `grid`, `curtail`, `revenue`, and `insurance`.
+3. Use a plant asset datasource, or rely on dashboard `SelectedAsset`.
+4. Add the plant attribute `tariff_rate_lkr` in LKR/kWh for revenue mode.
+5. Confirm these settings match plant telemetry:
+   - `actualPowerKeys`: `active_power`
+   - `potentialPowerKeys`: `potential_power`
+   - `setpointKeys`: `setpoint_active_power, curtailment_limit, power_limit`
+   - `plantCapacityKey`: `Capacity`
+
+## Fallback Behavior
+
+When computed mode cannot run:
+
+- `grid`, `curtail`, and `revenue` fall back to `DS[0]`.
+- `insurance` always uses `DS[0]`.
+- Severity thresholds and formatting remain compatible with the older widget.
