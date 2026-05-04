@@ -1,0 +1,143 @@
+/* ============================================
+   Portfolio Performance Table V2
+   ThingsBoard v4.3.0 PE | Latest Values
+   Multi-Entity Dynamic Columns
+   ============================================ */
+
+.compliance-card {
+    --c-bg: linear-gradient(180deg, rgba(2, 10, 67, 0.95) 0%, rgba(5, 20, 50, 0.95) 100%);
+    --c-border: rgba(19, 115, 239, 0.4);
+    --c-glow: rgba(6, 245, 255, 0.15);
+    
+    --c-text: #FFFFFF;
+    --c-text-dim: #B0BEC5;
+    --c-text-muted: #90A4AE;
+    
+    --c-healthy: #66BB6A;
+    --c-warning: #FFC107;
+    --c-critical: #FF5252;
+    
+    --c-header-bg: rgba(255, 255, 255, 0.05);
+    --c-row-hover: rgba(255, 255, 255, 0.04);
+    --c-row-border: rgba(255, 255, 255, 0.08);
+
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    
+    display: flex;
+    flex-direction: column;
+    
+    background: var(--c-bg);
+    border: 2px solid var(--c-border);
+    box-shadow: 0 0 15px var(--c-glow), inset 0 0 20px rgba(0, 0, 0, 0.5);
+    border-radius: 8px;
+    padding: 0.6em 0.8em;
+    box-sizing: border-box;
+    overflow: hidden;
+    
+    font-family: 'Roboto', sans-serif;
+    color: var(--c-text);
+}
+
+.table-header {
+    flex: 0 0 auto;
+    margin-bottom: 0.5em;
+    padding-bottom: 0.3em;
+    border-bottom: 1px solid var(--c-row-border);
+}
+
+.table-title {
+    font-size: 1em;
+    font-weight: 700;
+    color: var(--c-text);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.table-container {
+    flex: 1 1 auto;
+    overflow-y: auto;
+    min-height: 0;
+    margin-bottom: 0.5em;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+}
+
+.table-container::-webkit-scrollbar {
+    width: 4px;
+}
+.table-container::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 2px;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+}
+
+thead {
+    position: sticky;
+    top: 0;
+    background: var(--c-bg);
+    z-index: 10;
+}
+
+th {
+    text-align: left;
+    padding: 0.4em 0.5em;
+    font-size: 0.6em;
+    font-weight: 600;
+    color: var(--c-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    border-bottom: 1px solid var(--c-row-border);
+}
+
+td {
+    padding: 0.4em 0.5em;
+    font-size: 0.7em;
+    border-bottom: 1px solid var(--c-row-border);
+    color: var(--c-text-dim);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+tbody tr {
+    transition: background 0.2s ease;
+}
+
+tbody tr:hover {
+    background: var(--c-row-hover);
+}
+
+.col-center { text-align: center; }
+.col-right { text-align: right; }
+
+.text-healthy { color: var(--c-healthy); font-weight: 600; }
+.text-warning { color: var(--c-warning); font-weight: 600; }
+.text-critical { color: var(--c-critical); font-weight: 600; }
+.text-bold { color: #fff; font-weight: 500; }
+
+.table-footer {
+    flex: 0 0 auto;
+    display: flex;
+    justify-content: space-between;
+    padding-top: 0.4em;
+    border-top: 1px solid var(--c-row-border);
+    font-size: 0.65em;
+    font-weight: 500;
+    color: var(--c-text-muted);
+    text-transform: uppercase;
+}
+
+.footer-val {
+    color: #fff;
+    font-weight: 700;
+    margin-left: 0.3em;
+}

@@ -1,0 +1,124 @@
+/* ========================================
+   Demo Monthly Curtailment KPI Card
+   ThingsBoard v4.3.0 PE | Static Demo Widget
+   ======================================== */
+.energy-card.loss-demo {
+    /* --- COLOR TOKENS (Loss Attribution Theme) --- */
+    --c-bg-gradient: linear-gradient(180deg, rgba(2, 10, 67, 0.95) 0%, rgba(5, 20, 50, 0.95) 100%);
+    --c-border: rgba(255, 82, 82, 0.4);
+    --c-border-hover: rgba(255, 82, 82, 0.8);
+    --c-glow: rgba(255, 82, 82, 0.15);
+    --c-glow-hover: rgba(255, 82, 82, 0.25);
+    
+    --c-value: #FF5252;
+    --c-title: #FFFFFF;
+    --c-subtitle: #90A4AE;
+    --c-unit: #FF5252;
+
+    /* --- TYPOGRAPHY --- */
+    --f-family: 'Roboto', sans-serif;
+    /* Base font-size is set dynamically via JS onResize */
+
+    /* --- LAYOUT: Absolute fill --- */
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: 100%;
+    height: 100%;
+    margin: 0;
+
+    /* Always vertical stack */
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+
+    background: var(--c-bg-gradient);
+    border: 2px solid var(--c-border);
+    box-shadow: 0 0 15px var(--c-glow), inset 0 0 20px rgba(0, 0, 0, 0.5);
+    border-radius: 8px;
+    padding: 4px 10px;
+    box-sizing: border-box;
+    overflow: hidden;
+    z-index: 1;
+
+    transition: border-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+/* --- HOVER GLOW --- */
+.energy-card.loss-demo:hover {
+    border-color: var(--c-border-hover);
+    box-shadow: 0 0 25px var(--c-glow-hover), inset 0 0 10px rgba(0, 0, 0, 0.2);
+}
+
+/* --- HEADER --- */
+.energy-card.loss-demo .card-header {
+    flex: 0 0 auto;
+    width: 100%;
+    text-align: center;
+    z-index: 2;
+    line-height: 1.1;
+}
+
+.energy-card.loss-demo .card-title {
+    font-family: var(--f-family);
+    font-size: 0.65em;
+    font-weight: 700;
+    color: var(--c-title);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* --- BODY --- */
+.energy-card.loss-demo .card-body {
+    flex: 1;
+    display: flex;
+    align-items: baseline;
+    justify-content: center;
+    gap: 0.1em;
+    width: 100%;
+    z-index: 2;
+    min-height: 0;
+}
+
+.energy-card.loss-demo .metric-value {
+    font-family: var(--f-family);
+    font-size: 1.7em;
+    font-weight: 700;
+    color: var(--c-value);
+    line-height: 1;
+    text-shadow: 0 0 8px rgba(255, 82, 82, 0.4);
+}
+
+.energy-card.loss-demo .metric-unit {
+    font-family: var(--f-family);
+    font-size: 0.85em;
+    font-weight: 600;
+    color: var(--c-unit);
+    opacity: 0.9;
+}
+
+/* --- FOOTER --- */
+.energy-card.loss-demo .card-footer {
+    flex: 0 0 auto;
+    width: 100%;
+    text-align: center;
+    z-index: 2;
+    line-height: 1.1;
+}
+
+.energy-card.loss-demo .card-subtitle {
+    font-family: var(--f-family);
+    font-size: 0.55em;
+    font-weight: 500;
+    color: var(--c-subtitle);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}

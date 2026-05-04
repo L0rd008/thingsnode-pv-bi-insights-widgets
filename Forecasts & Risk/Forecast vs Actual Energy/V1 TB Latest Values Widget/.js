@@ -194,6 +194,21 @@ function initChart() {
                     tension: 0.2,
                     order: 1,
                     spanGaps: true
+                },
+                /* DS 5: Physics Expected (pvlib) — green dotted, behind actuals */
+                {
+                    label: 'Physics Expected (pvlib)',
+                    data: [],
+                    borderColor: '#69F0AE',
+                    borderWidth: 1.8,
+                    borderDash: [3, 4],
+                    pointRadius: 0,
+                    pointHoverRadius: 3,
+                    pointHoverBackgroundColor: '#69F0AE',
+                    fill: false,
+                    tension: 0.25,
+                    order: 2,
+                    spanGaps: true
                 }
             ]
         },
@@ -338,12 +353,13 @@ function fetchLiveData() {
     var startTs = now - (windowDays * 24 * 60 * 60 * 1000);
 
     /* ── Tier 1: Try fetching real forecast telemetry ── */
-    var p50Key = s.forecastP50Key || 'forecast_p50_daily';
-    var p75Key = s.forecastP75Key || 'forecast_p75_daily';
-    var p90Key = s.forecastP90Key || 'forecast_p90_daily';
-    var actKey = s.actualEnergyKey || 'total_generation';
+    var p50Key    = s.forecastP50Key      || 'forecast_p50_daily';
+    var p75Key    = s.forecastP75Key      || 'forecast_p75_daily';
+    var p90Key    = s.forecastP90Key      || 'forecast_p90_daily';
+    var actKey    = s.actualEnergyKey     || 'total_generation';
+    var pvlibKey  = s.pvlibExpectedKey    || 'total_generation_expected_kwh';
 
-    var allKeys = [actKey, p50Key, p75Key, p90Key].join(',');
+    var allKeys = [actKey, p50Key, p75Key, p90Key, pvlibKey].join(',');
 
     var url = '/api/plugins/telemetry/' + entTypeStr + '/' + entIdStr +
         '/values/timeseries?keys=' + allKeys +
@@ -442,20 +458,22 @@ function processLiveData(data, s) {
     dataMode = 'live';
     updateStatusBadge();
 
-    var actKey = s.actualEnergyKey || 'total_generation';
-    var p50Key = s.forecastP50Key || 'forecast_p50_daily';
-    var p75Key = s.forecastP75Key || 'forecast_p75_daily';
-    var p90Key = s.forecastP90Key || 'forecast_p90_daily';
+    var actKey   = s.actualEnergyKey  || 'total_generation';
+    var p50Key   = s.forecastP50Key   || 'forecast_p50_daily';
+    var p75Key   = s.forecastP75Key   || 'forecast_p75_daily';
+    var p90Key   = s.forecastP90Key   || 'forecast_p90_daily';
+    var pvlibKey = s.pvlibExpectedKey || 'total_generation_expected_kwh';
     var unit = s.unitLabel || 'MWh';
 
     /* ── Parse each key into daily buckets ── */
-    var actuals = parseTsToDailyMap(data[actKey] || []);
-    var p50Vals = parseTsToDailyMap(data[p50Key] || []);
-    var p75Vals = parseTsToDailyMap(data[p75Key] || []);
-    var p90Vals = parseTsToDailyMap(data[p90Key] || []);
+    var actuals   = parseTsToDailyMap(data[actKey]   || []);
+    var p50Vals   = parseTsToDailyMap(data[p50Key]   || []);
+    var p75Vals   = parseTsToDailyMap(data[p75Key]   || []);
+    var p90Vals   = parseTsToDailyMap(data[p90Key]   || []);
+    var pvlibVals = parseTsToDailyMap(data[pvlibKey] || []);
 
     /* ── Build aligned date labels ── */
-    var allDates = mergeKeys(actuals, p50Vals, p75Vals, p90Vals);
+    var allDates = mergeKeys(actuals, p50Vals, p75Vals, p90Vals, pvlibVals);
     allDates.sort();
 
     var labels = [];
@@ -464,18 +482,22 @@ function processLiveData(data, s) {
     var dataP75 = [];
     var dataP90 = [];
     var dataBand = [];
+    var dataPvlib = [];
 
     for (var i = 0; i < allDates.length; i++) {
         var day = allDates[i];
         labels.push(formatDateLabel(day));
-        dataActual.push(actuals[day] != null ? actuals[day] : null);
-        dataP50.push(p50Vals[day] != null ? p50Vals[day] : null);
-        dataP75.push(p75Vals[day] != null ? p75Vals[day] : null);
-        dataP90.push(p90Vals[day] != null ? p90Vals[day] : null);
-        dataBand.push(p50Vals[day] != null ? p50Vals[day] : null);
+        dataActual.push(actuals[day]   != null ? actuals[day]   : null);
+        dataP50.push(p50Vals[day]      != null ? p50Vals[day]   : null);
+        dataP75.push(p75Vals[day]      != null ? p75Vals[day]   : null);
+        dataP90.push(p90Vals[day]      != null ? p90Vals[day]   : null);
+        dataBand.push(p50Vals[day]     != null ? p50Vals[day]   : null);
+        /* pvlib stores kWh — convert to display unit (default MWh: /1000) */
+        var pvlibRaw = pvlibVals[day];
+        dataPvlib.push(pvlibRaw != null ? (unit === 'MWh' ? pvlibRaw / 1000 : pvlibRaw) : null);
     }
 
-    renderChart(labels, dataP50, dataP75, dataP90, dataBand, dataActual);
+    renderChart(labels, dataP50, dataP75, dataP90, dataBand, dataActual, dataPvlib);
     updateRiskState(dataActual, dataP50, dataP75, s);
     updateTooltipSummary(dataActual, dataP50, dataP75, dataP90, s);
 }
@@ -640,18 +662,19 @@ function renderNoData() {
    CHART RENDERING
    ═══════════════════════════════════════════════════ */
 
-function renderChart(labels, p50, p75, p90, band, actual) {
+function renderChart(labels, p50, p75, p90, band, actual, pvlib) {
     if (!myChart) return;
 
     var s = self.ctx.settings;
     var showBand = (s.showConfidenceBand !== false);
 
     myChart.data.labels = labels;
-    myChart.data.datasets[0].data = p50;      // P50
-    myChart.data.datasets[1].data = p75;      // P75
-    myChart.data.datasets[2].data = p90;      // P90
+    myChart.data.datasets[0].data = p50;                    // P50 Forecast
+    myChart.data.datasets[1].data = p75;                    // P75 Forecast
+    myChart.data.datasets[2].data = p90;                    // P90 Forecast
     myChart.data.datasets[3].data = showBand ? band : [];   // Confidence Band
-    myChart.data.datasets[4].data = actual;   // Actual
+    myChart.data.datasets[4].data = actual;                 // Actual Energy
+    myChart.data.datasets[5].data = pvlib || [];            // Physics Expected (pvlib)
 
     // Calculate dynamic y-axis range
     var allVals = [].concat(p50, p75, p90, actual).filter(function(v) { return v !== null && v !== undefined; });

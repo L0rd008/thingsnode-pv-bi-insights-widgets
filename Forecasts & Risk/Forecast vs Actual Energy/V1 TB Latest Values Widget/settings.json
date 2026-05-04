@@ -103,5 +103,12 @@
         "type": "text",
         "default": "",
         "helpText": "Static tooltip override. Leave blank for auto-generated risk summary."
+    },
+    {
+        "id": "pvlibExpectedKey",
+        "name": "Physics Expected Energy Key (pvlib)",
+        "type": "text",
+        "default": "total_generation_expected_kwh",
+        "helpText": "Daily expected energy written by the pvlib-service daily roll-up job (kWh stored, auto-converted to MWh for display). Shown as a green dotted line alongside the P50 forecast. Leave blank to hide."
     }
 ]

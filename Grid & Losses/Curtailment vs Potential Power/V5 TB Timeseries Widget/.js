@@ -962,13 +962,13 @@ function initChart() {
                             if (hasPotentialData() && potV != null && eVal != null) {
                                 var tl = Math.max(potV - eVal, 0);
                                 var excess = Math.max(eVal - potV, 0);
-                                if (tl >= 0.01) lines.push('Gross Loss: ' + tl.toFixed(dec2) + ' ' + unit);
-                                if (excess >= 0.01) lines.push('Excess: ' + excess.toFixed(dec2) + ' ' + unit);
+                                if (tl >= 0.01) lines.push('Gross Loss (Power): ' + tl.toFixed(dec2) + ' ' + unit);
+                                if (excess >= 0.01) lines.push('Excess (Power): ' + excess.toFixed(dec2) + ' ' + unit);
                             }
                             if (hasPotentialData() && potV != null && ceil != null) {
                                 var curtailBase = (eVal != null) ? Math.max(ceil, eVal) : ceil;
                                 var cl = Math.max(potV - curtailBase, 0);
-                                if (cl >= 0.01) lines.push('Curtailed Loss: ' + cl.toFixed(dec2) + ' ' + unit);
+                                if (cl >= 0.01) lines.push('Curtailed Loss (Power): ' + cl.toFixed(dec2) + ' ' + unit);
                             }
                             return lines.length ? lines.join('\n') : '';
                         }
@@ -1276,11 +1276,11 @@ function getTimeBounds(tf) {
     return { minTime: st, maxTime: Math.max(st + 1, et) };
 }
 
-/* Auto interval based purely on timeframe — V3's original defaults */
+/* Auto interval based purely on timeframe — strict intervals for accuracy */
 function getAutoIntervalMs(tf) {
     if (isDayView(tf) || _selectedDate !== null)    return 5  * 60 * 1000;  /* 5 min  */
-    if (tf === 'this_week' || tf === 'prev_week')   return 15 * 60 * 1000;  /* 15 min */
-    return 60 * 60 * 1000;                                                   /* 1 hr   */
+    if (tf === 'this_week' || tf === 'prev_week')   return 10 * 60 * 1000;  /* 10 min */
+    return 15 * 60 * 1000;                                                   /* 15 min */
 }
 
 /* Effective interval: user override (if valid) or auto default */
@@ -1428,6 +1428,51 @@ function resolveEntity() {
 /* ────────────────────────────────────────────────────
    LIVE DATA FETCH  [F6 — per-key encoding, parallel]
    ──────────────────────────────────────────────────── */
+function fetchTimeseriesChunked(entity, encodedKeys, startTs, endTs, bucketMs, useAgg) {
+    if (!entity || !entity.id || !encodedKeys) return Promise.resolve({});
+    var maxBucketsPerChunk = 700; /* ThingsBoard has a hard limit on intervals per query */
+    var RAW_CHUNK_MS = 31 * 24 * 60 * 60 * 1000; /* 1 month max for raw */
+    var chunkMs = useAgg ? (maxBucketsPerChunk * bucketMs) : RAW_CHUNK_MS;
+    var promises = [];
+
+    for (var cursor = startTs; cursor < endTs; cursor += chunkMs) {
+        var chunkEnd = Math.min(endTs, cursor + chunkMs);
+        var url = '/api/plugins/telemetry/' + entity.type + '/' + entity.id +
+            '/values/timeseries?keys=' + encodedKeys +
+            '&startTs=' + cursor + '&endTs=' + chunkEnd +
+            '&limit=50000';
+            
+        if (useAgg) {
+            url += '&interval=' + bucketMs + '&agg=AVG';
+        } else {
+            url += '&agg=NONE';
+        }
+
+        promises.push(new Promise(function(resolve, reject) {
+            try {
+                self.ctx.http.get(url).subscribe(resolve, reject);
+            } catch(e) {
+                reject(e);
+            }
+        }));
+    }
+
+    return Promise.all(promises).then(function(results) {
+        var merged = {};
+        for (var i = 0; i < results.length; i++) {
+            var data = results[i] || {};
+            for (var key in data) {
+                if (!Object.prototype.hasOwnProperty.call(data, key)) continue;
+                if (!merged[key]) merged[key] = [];
+                if (Array.isArray(data[key])) {
+                    merged[key] = merged[key].concat(data[key]);
+                }
+            }
+        }
+        return merged;
+    });
+}
+
 function fetchLiveData() {
     var entity = resolveEntity();
     if (!entity || !entity.id) { renderNoData(); return; }
@@ -1487,26 +1532,20 @@ function fetchLiveData() {
     }
 
     var powerKeysEnc = actualKeys.map(function(k) { return encodeURIComponent(k); }).join(',');
-    var powerUrl = buildPowerTimeseriesUrl(baseUrl, powerKeysEnc, startTs, endTs, bucketMs, 50000);
-    try {
-        self.ctx.http.get(powerUrl).subscribe(
-            function (data) { powerData = data; powerDone = true; tryProcess(); },
-            function ()     { powerDone = true; tryProcess(); }
-        );
-    } catch (e) { powerDone = true; tryProcess(); }
+    if (powerKeysEnc) {
+        fetchTimeseriesChunked(entity, powerKeysEnc, startTs, endTs, bucketMs, true)
+            .then(function (data) { powerData = data; powerDone = true; tryProcess(); })
+            .catch(function () { powerDone = true; tryProcess(); });
+    } else {
+        powerDone = true;
+    }
 
     /* 3) Setpoint telemetry — raw with 30-day lookback */
     if (spKeys.length) {
         var spKeysEnc = spKeys.map(function(k) { return encodeURIComponent(k); }).join(',');
-        var spUrl = baseUrl + '/values/timeseries?keys=' + spKeysEnc +
-            '&startTs=' + (startTs - 2592000000) + '&endTs=' + endTs +
-            '&limit=10000&agg=NONE';
-        try {
-            self.ctx.http.get(spUrl).subscribe(
-                function (data) { setpointData = data; setpointDone = true; tryProcess(); },
-                function ()     { setpointDone = true; tryProcess(); }
-            );
-        } catch (e) { setpointDone = true; tryProcess(); }
+        fetchTimeseriesChunked(entity, spKeysEnc, startTs - 2592000000, endTs, null, false)
+            .then(function (data) { setpointData = data; setpointDone = true; tryProcess(); })
+            .catch(function () { setpointDone = true; tryProcess(); });
     } else {
         setpointDone = true;
     }
@@ -1515,25 +1554,17 @@ function fetchLiveData() {
     if (needsSunsetProxy) {
         var historyStartTs = startTs - (3 * 86400000);
         var historyEndTs   = startTs - 1;
-        var historyUrl = buildPowerTimeseriesUrl(baseUrl, powerKeysEnc, historyStartTs, historyEndTs, 300000, 50000);
-        try {
-            self.ctx.http.get(historyUrl).subscribe(
-                function (data) { historyPowerData = data; historyPowerDone = true; tryProcess(); },
-                function ()     { historyPowerDone = true; tryProcess(); }
-            );
-        } catch (e) { historyPowerDone = true; tryProcess(); }
+        fetchTimeseriesChunked(entity, powerKeysEnc, historyStartTs, historyEndTs, 300000, true)
+            .then(function (data) { historyPowerData = data; historyPowerDone = true; tryProcess(); })
+            .catch(function () { historyPowerDone = true; tryProcess(); });
     }
 
     /* 5) Physics potential_power from pvlib-service (Gap 8 — TB-first, falls back to half-sine) */
     if (potentialKeys.length) {
         var potKeysEnc = potentialKeys.map(function(k) { return encodeURIComponent(k); }).join(',');
-        var potUrl = buildPowerTimeseriesUrl(baseUrl, potKeysEnc, startTs, endTs, bucketMs, 50000);
-        try {
-            self.ctx.http.get(potUrl).subscribe(
-                function (data) { potentialPowerData = data; potentialDone = true; tryProcess(); },
-                function ()     { potentialDone = true; tryProcess(); }
-            );
-        } catch (e) { potentialDone = true; tryProcess(); }
+        fetchTimeseriesChunked(entity, potKeysEnc, startTs, endTs, bucketMs, true)
+            .then(function (data) { potentialPowerData = data; potentialDone = true; tryProcess(); })
+            .catch(function () { potentialDone = true; tryProcess(); });
     }
 
     tryProcess();

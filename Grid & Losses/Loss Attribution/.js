@@ -21,6 +21,7 @@ self.onInit = function () {
         grid: '<svg viewBox="0 0 24 24"><path d="M20 12l-1.41-1.41L13 16.17V4h-2v12.17l-5.58-5.59L4 12l8 8 8-8z"/></svg>',
         curtail: '<svg viewBox="0 0 24 24"><path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"/></svg>',
         revenue: '<svg viewBox="0 0 24 24"><path d="M11.8 10.9c-2.27-.59-3-1.2-3-2.15 0-1.09 1.01-1.85 2.7-1.85 1.78 0 2.44.85 2.5 2.1h2.21c-.07-1.72-1.12-3.3-3.21-3.81V3h-3v2.16c-1.94.42-3.5 1.68-3.5 3.61 0 2.31 1.91 3.46 4.7 4.13 2.5.6 3 1.48 3 2.41 0 .69-.49 1.79-2.7 1.79-2.06 0-2.87-.92-2.98-2.1h-2.2c.12 2.19 1.76 3.42 3.68 3.83V21h3v-2.15c1.95-.37 3.5-1.5 3.5-3.55 0-2.84-2.43-3.81-4.7-4.4z"/></svg>',
+        curtailRevenue: '<svg viewBox="0 0 24 24"><path d="M11.8 10.9c-2.27-.59-3-1.2-3-2.15 0-1.09 1.01-1.85 2.7-1.85 1.78 0 2.44.85 2.5 2.1h2.21c-.07-1.72-1.12-3.3-3.21-3.81V3h-3v2.16c-1.94.42-3.5 1.68-3.5 3.61 0 2.31 1.91 3.46 4.7 4.13 2.5.6 3 1.48 3 2.41 0 .69-.49 1.79-2.7 1.79-2.06 0-2.87-.92-2.98-2.1h-2.2c.12 2.19 1.76 3.42 3.68 3.83V21h3v-2.15c1.95-.37 3.5-1.5 3.5-3.55 0-2.84-2.43-3.81-4.7-4.4z"/></svg>',
         insurance: '<svg viewBox="0 0 24 24"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm0 10.99h7c-.53 4.12-3.28 7.79-7 8.94V12H5V6.3l7-3.11v8.8z"/></svg>',
         rangeSelector: '<svg viewBox="0 0 24 24"><path d="M7 2h2v2h6V2h2v2h3v18H4V4h3V2zm11 8H6v10h12V10z"/></svg>'
     };
@@ -53,6 +54,15 @@ self.onInit = function () {
             computed: true,
             metricKey: 'revenueLossLkr'
         },
+        curtailRevenue: {
+            title: 'CURTAILMENT REVENUE LOSS',
+            sub: 'Financial Impact of Limits',
+            tooltip: 'Curtailment energy loss multiplied by the plant tariff rate.',
+            footer: 'Financial Loss - Curtailment',
+            isFinancial: true,
+            computed: true,
+            metricKey: 'curtailRevenueLossLkr'
+        },
         insurance: {
             title: 'INSURANCE CLAIMABLE LOSS',
             sub: 'Eligible Major Events',
@@ -83,7 +93,7 @@ self.updateDom = function () {
     var def = getModeDef(mode);
     var $card = $el.find('.loss-card');
 
-    $card.removeClass('mode-grid mode-curtail mode-revenue mode-insurance mode-rangeSelector is-selector');
+    $card.removeClass('mode-grid mode-curtail mode-revenue mode-curtailRevenue mode-insurance mode-rangeSelector is-selector');
     $card.addClass('mode-' + mode);
 
     if (mode === 'rangeSelector') {
@@ -105,6 +115,17 @@ self.updateDom = function () {
     if (mode === 'rangeSelector') {
         setupRangeSelector();
     }
+
+    self._onRangeChanged = function(e) {
+        if (e && e.detail) {
+            self._activeRangeOverride = e.detail;
+            storeRangeLocal(e.detail);
+            if (getMode() !== 'rangeSelector') {
+                debouncedComputedRender();
+            }
+        }
+    };
+    window.addEventListener('loss-range-changed', self._onRangeChanged);
 };
 
 self.onDataUpdated = function () {
@@ -152,37 +173,62 @@ function renderComputedMode() {
 
     setLoadingState(range);
 
+    var s = self.ctx.settings || {};
+    var useNew = s.useNewLossKeys !== undefined ? s.useNewLossKeys : 'auto';
+
+    /**
+     * Pick the calculation function for a given range.
+     *
+     * 'off'   → always legacy per-minute path.
+     * 'force' → always precomputed; no fallback.
+     * 'auto'  → precomputed UNLESS it's the current calendar day in day mode
+     *            (today: ≤1440 rows, legacy is fine and gives live data).
+     *            If precomputed returns ok=false, fall back to legacy.
+     */
+    function calcForRange(rangeObj, attrs) {
+        if (useNew === 'off') {
+            return calculateLossForRange(entity, rangeObj, attrs);
+        }
+
+        if (useNew === 'force') {
+            return calculateLossForRangePrecomputed(entity, rangeObj, attrs);
+        }
+
+        // 'auto' (default)
+        if (isCurrentDay(rangeObj)) {
+            // Today's data: use per-minute live path
+            return calculateLossForRange(entity, rangeObj, attrs);
+        }
+
+        return calculateLossForRangePrecomputed(entity, rangeObj, attrs)
+            .then(function (preResult) {
+                if (preResult && preResult.ok) {
+                    return preResult;
+                }
+                // Precomputed empty / not yet rolled up → silent fallback
+                return calculateLossForRange(entity, rangeObj, attrs);
+            })
+            .catch(function () {
+                return calculateLossForRange(entity, rangeObj, attrs);
+            });
+    }
+
     fetchCalculationAttributes(entity).then(function (attrs) {
         if (token !== self._calcToken) return null;
-        if (mode === 'revenue' && !isFiniteNumber(attrs.tariffRate)) {
+        if (mode === 'revenue' && !isFiniteNumber(attrs.tariffRate) && useNew === 'off') {
             return null;
         }
 
-        return calculateLossForRange(entity, range, attrs).then(function (primary) {
+        return calcForRange(range, attrs).then(function (primary) {
             var compRange = getComparatorRange(range);
             if (!compRange) {
-                return {
-                    attrs: attrs,
-                    primary: primary,
-                    comparator: null,
-                    compRange: null
-                };
+                return { attrs: attrs, primary: primary, comparator: null, compRange: null };
             }
 
-            return calculateLossForRange(entity, compRange, attrs).then(function (comparator) {
-                return {
-                    attrs: attrs,
-                    primary: primary,
-                    comparator: comparator,
-                    compRange: compRange
-                };
+            return calcForRange(compRange, attrs).then(function (comparator) {
+                return { attrs: attrs, primary: primary, comparator: comparator, compRange: compRange };
             }).catch(function () {
-                return {
-                    attrs: attrs,
-                    primary: primary,
-                    comparator: null,
-                    compRange: null
-                };
+                return { attrs: attrs, primary: primary, comparator: null, compRange: null };
             });
         });
     }).then(function (result) {
@@ -203,8 +249,21 @@ function renderComputedMode() {
 function renderComputedResult(mode, def, range, attrs, primary, comparator, compRange) {
     var value;
     if (mode === 'revenue') {
-        value = primary.grossLossKWh * attrs.tariffRate;
-        primary.revenueLossLkr = value;
+        // Prefer the pre-computed LKR value (historically accurate tariff).
+        // Fall back to kWh × current tariff for the legacy path or when LKR key is missing.
+        if (primary.fromPrecomputed && isFiniteNumber(primary.revenueLossLkr) && primary.revenueLossLkr >= 0) {
+            value = primary.revenueLossLkr;
+        } else {
+            value = primary.grossLossKWh * attrs.tariffRate;
+            primary.revenueLossLkr = value;
+        }
+    } else if (mode === 'curtailRevenue') {
+        if (primary.fromPrecomputed && isFiniteNumber(primary.curtailRevenueLossLkr) && primary.curtailRevenueLossLkr >= 0) {
+            value = primary.curtailRevenueLossLkr;
+        } else {
+            value = primary.curtailLossKWh * attrs.tariffRate;
+            primary.curtailRevenueLossLkr = value;
+        }
     } else {
         value = primary[def.metricKey] / 1000;
     }
@@ -234,7 +293,7 @@ function renderComputedResult(mode, def, range, attrs, primary, comparator, comp
             ' Value: ' + formattedText +
             '. Potential: ' + formatEnergy(primary.potentialEnergyKWh / 1000) +
             '. Loss rate: ' + (lossRate * 100).toFixed(2) + '%.';
-        if (mode === 'revenue') {
+        if (mode === 'revenue' || mode === 'curtailRevenue') {
             tip += ' Tariff: ' + attrs.tariffRate + ' LKR/kWh.';
         }
         $el.find('.js-tooltip').text(tip);
@@ -312,6 +371,7 @@ function renderDelta(def, primary, comparator, compRange) {
 
     if (baseRate === 0 && selectedRate === 0) {
         $delta.removeClass('delta-good delta-bad').addClass('delta-neutral');
+        $el.find('.js-delta-arrow').text('');
         $el.find('.js-delta-value').text('0.0%');
         $el.find('.js-delta-label').text('vs ' + compRange.label);
         $delta.css('visibility', 'visible');
@@ -326,12 +386,16 @@ function renderDelta(def, primary, comparator, compRange) {
     var pct = ((selectedRate - baseRate) / baseRate) * 100;
     var absPct = Math.abs(pct);
     var cls = 'delta-neutral';
+    var arrow = '';
+    
     if (absPct >= DELTA_NEUTRAL_PCT) {
-        cls = pct < 0 ? 'delta-good' : 'delta-bad';
+        cls = pct <= 0 ? 'delta-good' : 'delta-bad';
+        arrow = pct > 0 ? '▲ ' : '▼ ';
     }
 
     $delta.removeClass('delta-good delta-bad delta-neutral').addClass(cls);
-    $el.find('.js-delta-value').text((pct > 0 ? '+' : '') + pct.toFixed(1) + '%');
+    $el.find('.js-delta-arrow').text(arrow);
+    $el.find('.js-delta-value').text(absPct.toFixed(1) + '%');
     $el.find('.js-delta-label').text('vs ' + compRange.label);
     $delta.css('visibility', 'visible');
 }
@@ -345,7 +409,8 @@ function hideDelta() {
 
 function getMetricLossRate(def, metrics) {
     if (!metrics || !metrics.potentialEnergyKWh || metrics.potentialEnergyKWh <= 0) return NaN;
-    var lossKWh = def.metricKey === 'curtailLossKWh' ? metrics.curtailLossKWh : metrics.grossLossKWh;
+    var isCurtail = def.metricKey === 'curtailLossKWh' || def.metricKey === 'curtailRevenueLossLkr';
+    var lossKWh = isCurtail ? metrics.curtailLossKWh : metrics.grossLossKWh;
     return lossKWh / metrics.potentialEnergyKWh;
 }
 
@@ -393,6 +458,155 @@ function getLatestDataValue() {
     return self.ctx.data[0].data[0][1];
 }
 
+// ── Precomputed fast path (server-side aggregated daily/lifetime keys) ────────
+
+/**
+ * Read precomputed daily or lifetime loss keys from ThingsBoard.
+ *
+ * For lifetime ranges: reads six SERVER_SCOPE attributes and returns them directly.
+ * For all other ranges: fetches daily timeseries keys over [range.startTs, range.endTs],
+ * sums each series (dropping -1 sentinels), and returns a result object with the same
+ * shape as calculateLossForRange().
+ *
+ * Revenue / curtailRevenue: prefers the pre-computed LKR key; falls back to kWh × tariff
+ * when the LKR key is missing or zero (e.g. plant had no tariff at compute time).
+ *
+ * Returns a Promise resolving to:
+ *   { ok, grossLossKWh, curtailLossKWh, potentialEnergyKWh, exportedEnergyKWh,
+ *     revenueLossLkr, curtailRevenueLossLkr, bucketMs,
+ *     fromPrecomputed: true }
+ */
+function calculateLossForRangePrecomputed(entity, range, attrs) {
+    var s = self.ctx.settings || {};
+    var prefix = s.lossLifetimeAttrPrefix !== undefined ? s.lossLifetimeAttrPrefix : 'loss_';
+
+    // ── Lifetime: single attribute read ────────────────────────────────────
+    if (range.mode === 'lifetime') {
+        var lifetimeAttrNames = [
+            prefix + 'grid_lifetime_kwh',
+            prefix + 'curtail_lifetime_kwh',
+            prefix + 'revenue_lifetime_lkr',
+            prefix + 'curtail_revenue_lifetime_lkr',
+            'potential_energy_lifetime_kwh',
+            'exported_energy_lifetime_kwh',
+            prefix + 'lifetime_anchor_date',
+        ];
+
+        return fetchAttributesWithFallback(entity, lifetimeAttrNames).then(function (attrMap) {
+            var gridKwh     = parseFloat(attrMap[prefix + 'grid_lifetime_kwh']);
+            var curtailKwh  = parseFloat(attrMap[prefix + 'curtail_lifetime_kwh']);
+            var revLkr      = parseFloat(attrMap[prefix + 'revenue_lifetime_lkr']);
+            var curtRevLkr  = parseFloat(attrMap[prefix + 'curtail_revenue_lifetime_lkr']);
+            var potKwh      = parseFloat(attrMap['potential_energy_lifetime_kwh']);
+            var expKwh      = parseFloat(attrMap['exported_energy_lifetime_kwh']);
+
+            var hasPotential = isFiniteNumber(potKwh) && potKwh >= 0;
+            var hasGrid      = isFiniteNumber(gridKwh) && gridKwh >= 0;
+
+            // Fall back to kWh × current tariff if LKR key is missing/negative
+            if (!isFiniteNumber(revLkr) || revLkr < 0) {
+                revLkr = isFiniteNumber(gridKwh) && isFiniteNumber(attrs.tariffRate)
+                    ? gridKwh * attrs.tariffRate
+                    : NaN;
+            }
+            if (!isFiniteNumber(curtRevLkr) || curtRevLkr < 0) {
+                curtRevLkr = isFiniteNumber(curtailKwh) && isFiniteNumber(attrs.tariffRate)
+                    ? curtailKwh * attrs.tariffRate
+                    : NaN;
+            }
+
+            return {
+                ok: hasPotential && hasGrid,
+                grossLossKWh:           isFiniteNumber(gridKwh)    ? gridKwh    : 0,
+                curtailLossKWh:         isFiniteNumber(curtailKwh) ? curtailKwh : 0,
+                potentialEnergyKWh:     isFiniteNumber(potKwh)     ? potKwh     : 0,
+                exportedEnergyKWh:      isFiniteNumber(expKwh)     ? expKwh     : 0,
+                revenueLossLkr:         revLkr,
+                curtailRevenueLossLkr:  curtRevLkr,
+                bucketMs: 0,
+                fromPrecomputed: true
+            };
+        });
+    }
+
+    // ── Daily: timeseries sum over [startTs, endTs] ─────────────────────────
+    var gridKey     = s.lossDailyGridKey          || 'loss_grid_daily_kwh';
+    var curtailKey  = s.lossDailyCurtailKey       || 'loss_curtail_daily_kwh';
+    var revenueKey  = s.lossDailyRevenueKey       || 'loss_revenue_daily_lkr';
+    var curtRevKey  = s.lossDailyCurtailRevenueKey|| 'loss_curtail_revenue_daily_lkr';
+    var potKey      = s.lossDailyPotentialKey     || 'potential_energy_daily_kwh';
+    var expKey      = s.lossDailyExportedKey      || 'exported_energy_daily_kwh';
+
+    var keysToFetch = uniqueList([gridKey, curtailKey, revenueKey, curtRevKey, potKey, expKey]);
+    var startTs = parseInt(range.startTs, 10);
+    var endTs   = parseInt(range.endTs, 10);
+
+    // Daily keys are pre-aggregated (one record per day); fetch raw (agg=NONE)
+    return fetchTimeseriesChunked(entity, keysToFetch, startTs, endTs, null, false)
+        .then(function (raw) {
+            function sumKey(key) {
+                var records = raw[key] || [];
+                var total = 0;
+                var hasValid = false;
+                for (var i = 0; i < records.length; i++) {
+                    var v = parseFloat(records[i].value);
+                    if (isFiniteNumber(v) && v >= 0) {
+                        total += v;
+                        hasValid = true;
+                    }
+                }
+                return hasValid ? total : -1;
+            }
+
+            var gridKwh    = sumKey(gridKey);
+            var curtailKwh = sumKey(curtailKey);
+            var revLkr     = sumKey(revenueKey);
+            var curtRevLkr = sumKey(curtRevKey);
+            var potKwh     = sumKey(potKey);
+            var expKwh     = sumKey(expKey);
+
+            var hasPotential = potKwh >= 0;
+            var hasGrid      = gridKwh >= 0;
+
+            // Fall back to kWh × current tariff when LKR key is missing/sentinel
+            if (revLkr < 0) {
+                revLkr = gridKwh >= 0 && isFiniteNumber(attrs.tariffRate)
+                    ? gridKwh * attrs.tariffRate
+                    : NaN;
+            }
+            if (curtRevLkr < 0) {
+                curtRevLkr = curtailKwh >= 0 && isFiniteNumber(attrs.tariffRate)
+                    ? curtailKwh * attrs.tariffRate
+                    : NaN;
+            }
+
+            return {
+                ok: hasPotential && hasGrid,
+                grossLossKWh:           gridKwh    >= 0 ? gridKwh    : 0,
+                curtailLossKWh:         curtailKwh >= 0 ? curtailKwh : 0,
+                potentialEnergyKWh:     potKwh     >= 0 ? potKwh     : 0,
+                exportedEnergyKWh:      expKwh     >= 0 ? expKwh     : 0,
+                revenueLossLkr:         revLkr,
+                curtailRevenueLossLkr:  curtRevLkr,
+                bucketMs: 0,
+                fromPrecomputed: true
+            };
+        });
+}
+
+/**
+ * Return true when range.mode === 'day' AND the start date is today (current calendar day).
+ * These ranges bypass the precomputed path and use per-minute fetch.
+ */
+function isCurrentDay(range) {
+    if (!range || range.mode !== 'day') return false;
+    var rangeStart = new Date(parseInt(range.startTs, 10));
+    var today = new Date();
+    return rangeStart.getFullYear() === today.getFullYear() &&
+           rangeStart.getMonth()    === today.getMonth()    &&
+           rangeStart.getDate()     === today.getDate();
+}
+
 function calculateLossForRange(entity, range, attrs) {
     var s = self.ctx.settings || {};
     var actualKeys = parseCommaList(s.actualPowerKeys || 'active_power');
@@ -419,18 +633,53 @@ function calculateLossForRange(entity, range, attrs) {
         var potentialSeries = getFirstMatchingSeries(powerData, potentialKeys);
         var setpointSeries = getFirstMatchingSeries(setpointData, setpointKeys) || [];
 
-        if (!actualSeries || !actualSeries.length || !potentialSeries || !potentialSeries.length) {
+        if (!actualSeries || !actualSeries.length) {
             return { ok: false };
         }
 
         var exportedKw = bucketAverage(actualSeries, startTs, endTs, bucketMs, false);
-        var potentialKw = bucketAverage(potentialSeries, startTs, endTs, bucketMs, true);
-        var N = Math.max(exportedKw.length, potentialKw.length);
-        var hPerBucket = bucketMs / 3600000;
+        var potentialKw = bucketAverage(potentialSeries || [], startTs, endTs, bucketMs, true);
         var capacityKw = capacityToKw(attrs.capacity, s.capacityUnit || 'kW');
         if (!isFiniteNumber(capacityKw) || capacityKw <= 0) {
             capacityKw = parseFloat(s.fallbackPower) || 1000;
         }
+
+        var N = exportedKw.length;
+        if (potentialKw.length < N) potentialKw.length = N;
+        
+        var hasAnyPotential = false;
+        for (var pi = 0; pi < potentialKw.length; pi++) {
+            if (potentialKw[pi] !== null && potentialKw[pi] !== undefined) {
+                hasAnyPotential = true;
+                break;
+            }
+        }
+
+        if (!hasAnyPotential) {
+            var firstOn = -1, lastOn = -1;
+            var thresholdKw = capacityKw * 0.01;
+            for (var k = 0; k < exportedKw.length; k++) {
+                if (exportedKw[k] != null && exportedKw[k] > thresholdKw) {
+                    if (firstOn === -1) firstOn = k;
+                    lastOn = k;
+                }
+            }
+            if (firstOn >= 0 && lastOn >= firstOn) {
+                var span = lastOn - firstOn;
+                for (var j = 0; j < exportedKw.length; j++) {
+                    if (j >= firstOn && j <= lastOn) {
+                        if (lastOn === firstOn) {
+                            potentialKw[j] = Math.max(capacityKw * 0.01, 0);
+                        } else {
+                            var frac = (j - firstOn) / span;
+                            potentialKw[j] = capacityKw * Math.sin(frac * Math.PI);
+                        }
+                    }
+                }
+            }
+        }
+
+        var hPerBucket = bucketMs / 3600000;
 
         setpointSeries.sort(function (a, b) {
             return parseInt(a.ts, 10) - parseInt(b.ts, 10);
@@ -519,12 +768,10 @@ function getSetpointPct(series, ts) {
 }
 
 function getBucketMsForRange(range) {
-    if (range && range.mode === 'day') return 5 * 60 * 1000;
-    if (range && range.mode === 'custom') {
-        var span = (parseInt(range.endTs, 10) || 0) - (parseInt(range.startTs, 10) || 0);
-        if (span <= 2 * 24 * 60 * 60 * 1000) return 5 * 60 * 1000;
-    }
-    return 60 * 60 * 1000;
+    var diff = parseInt(range.endTs, 10) - parseInt(range.startTs, 10);
+    if (diff <= 86400000 * 1.05) return 5 * 60000;
+    if (diff <= 86400000 * 7.05) return 10 * 60000;
+    return 15 * 60000;
 }
 
 function fetchCalculationAttributes(entity) {
@@ -612,47 +859,45 @@ function getAttr(attrs, key) {
 }
 
 function fetchRawTimeseries(entity, keys, startTs, endTs) {
-    if (!entity || !entity.id || !keys || !keys.length) return Promise.resolve({});
-    var merged = {};
-    var cursor = startTs;
-    var encodedKeys = keys.map(function (k) {
-        return encodeURIComponent(k);
-    }).join(',');
-
-    function nextChunk() {
-        if (cursor > endTs) return Promise.resolve(merged);
-        var chunkEnd = Math.min(endTs, cursor + RAW_CHUNK_MS - 1);
-        var url = '/api/plugins/telemetry/' + entity.type + '/' + entity.id +
-            '/values/timeseries?keys=' + encodedKeys +
-            '&startTs=' + cursor + '&endTs=' + chunkEnd +
-            '&agg=NONE&limit=' + TB_RAW_LIMIT;
-
-        return tbGet(url).then(function (data) {
-            mergeTimeseries(merged, data || {});
-            cursor = chunkEnd + 1;
-            return nextChunk();
-        });
-    }
-
-    return nextChunk();
+    return fetchTimeseriesChunked(entity, keys, startTs, endTs, null, false);
 }
 
 function fetchPowerTimeseries(entity, keys, startTs, endTs, bucketMs) {
+    return fetchTimeseriesChunked(entity, keys, startTs, endTs, bucketMs, true);
+}
+
+function fetchTimeseriesChunked(entity, keys, startTs, endTs, bucketMs, useAgg) {
     if (!entity || !entity.id || !keys || !keys.length) return Promise.resolve({});
-
-    var intervalCount = getAggIntervalCount(startTs, endTs, bucketMs);
-    if (intervalCount > TB_MAX_AVG_INTERVALS) {
-        return fetchRawTimeseries(entity, keys, startTs, endTs);
-    }
-
     var encodedKeys = keys.map(function (k) {
         return encodeURIComponent(k);
     }).join(',');
-    var url = '/api/plugins/telemetry/' + entity.type + '/' + entity.id +
-        '/values/timeseries?keys=' + encodedKeys +
-        '&startTs=' + startTs + '&endTs=' + endTs +
-        '&interval=' + bucketMs + '&agg=AVG&limit=' + TB_RAW_LIMIT;
-    return tbGet(url);
+
+    var maxBucketsPerChunk = 700;
+    var chunkMs = useAgg ? (maxBucketsPerChunk * bucketMs) : RAW_CHUNK_MS;
+    var promises = [];
+
+    for (var cursor = startTs; cursor < endTs; cursor += chunkMs) {
+        var chunkEnd = Math.min(endTs, cursor + chunkMs);
+        var url = '/api/plugins/telemetry/' + entity.type + '/' + entity.id +
+            '/values/timeseries?keys=' + encodedKeys +
+            '&startTs=' + cursor + '&endTs=' + chunkEnd +
+            '&limit=' + TB_RAW_LIMIT;
+            
+        if (useAgg) {
+            url += '&interval=' + bucketMs + '&agg=AVG';
+        } else {
+            url += '&agg=NONE';
+        }
+        promises.push(tbGet(url));
+    }
+
+    return Promise.all(promises).then(function(results) {
+        var merged = {};
+        for (var i = 0; i < results.length; i++) {
+            mergeTimeseries(merged, results[i] || {});
+        }
+        return merged;
+    });
 }
 
 function getAggIntervalCount(startTs, endTs, intervalMs) {
@@ -721,8 +966,8 @@ function bindRangeSelector() {
 
     var $el = self.ctx.$widget;
 
-    $el.find('.js-range-chip').on('click', function () {
-        var mode = $(this).data('range-mode');
+    $el.find('.js-range-mode-select').on('change', function () {
+        var mode = $(this).val();
         if (!mode) return;
 
         if (mode === 'lifetime') {
@@ -773,9 +1018,7 @@ function renderSelectorRange(range) {
     var mode = range && range.mode ? range.mode : 'month';
     var start = new Date(range.startTs || Date.now());
 
-    $el.find('.js-range-chip').removeClass('active')
-        .filter('[data-range-mode="' + mode + '"]').addClass('active');
-    $el.find('.js-range-label').text(range.label || 'Current Month');
+    $el.find('.js-range-mode-select').val(mode);
     $el.find('.js-footer-label').text(range.label || 'Shared Range');
     $el.find('.js-status-dot').removeClass('sev-low sev-moderate sev-high').addClass('sev-low');
     $el.find('.js-status-text').text('SYNC');
@@ -805,6 +1048,10 @@ function pushRange(range) {
     storeRangeLocal(range);
     renderSelectorRange(range);
 
+    try {
+        window.dispatchEvent(new CustomEvent('loss-range-changed', { detail: range }));
+    } catch(e) {}
+
     var sc = self.ctx.stateController;
     if (!sc) return;
 
@@ -828,13 +1075,26 @@ function pushRange(range) {
 }
 
 function getActiveRange() {
+    var ranges = [];
+    
+    if (self._activeRangeOverride) {
+        ranges.push(normalizeRange(self._activeRangeOverride));
+    }
+    
     var params = getStateParams();
     var raw = params ? params[LOSS_RANGE_PARAM] : null;
-    var parsed = normalizeRange(typeof raw === 'string' ? safeParseJson(raw) : raw);
-    if (parsed) return parsed;
-
-    parsed = normalizeRange(readRangeLocal());
-    if (parsed) return parsed;
+    var parsedParam = normalizeRange(typeof raw === 'string' ? safeParseJson(raw) : raw);
+    if (parsedParam) ranges.push(parsedParam);
+    
+    var parsedLocal = normalizeRange(readRangeLocal());
+    if (parsedLocal) ranges.push(parsedLocal);
+    
+    ranges = ranges.filter(Boolean);
+    if (ranges.length > 0) {
+        // Sort by updatedAt descending to pick the absolute newest
+        ranges.sort(function(a, b) { return (b.updatedAt || 0) - (a.updatedAt || 0); });
+        return ranges[0];
+    }
 
     return buildMonthRange(new Date());
 }
@@ -1169,4 +1429,7 @@ self.onDestroy = function () {
         self._calcTimer = null;
     }
     self._calcToken++;
+    if (self._onRangeChanged) {
+        window.removeEventListener('loss-range-changed', self._onRangeChanged);
+    }
 };

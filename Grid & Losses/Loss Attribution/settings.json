@@ -8,6 +8,7 @@
       { "value": "grid", "label": "Grid Availability Impact Loss" },
       { "value": "curtail", "label": "Curtailment Loss" },
       { "value": "revenue", "label": "Revenue Loss (Potential)" },
+      { "value": "curtailRevenue", "label": "Curtailment Revenue Loss" },
       { "value": "insurance", "label": "Insurance Claimable Loss" },
       { "value": "rangeSelector", "label": "Shared Range Selector" }
     ],
@@ -117,6 +118,61 @@
     "type": "text",
     "default": "2020-10-01",
     "helpText": "Fallback lifetime start date in YYYY-MM-DD format."
+  },
+  {
+    "id": "useNewLossKeys",
+    "name": "Use precomputed loss keys",
+    "type": "select",
+    "default": "auto",
+    "items": [
+      { "value": "auto",  "label": "Auto (use if available, fall back otherwise)" },
+      { "value": "force", "label": "Always use precomputed (no fallback)" },
+      { "value": "off",   "label": "Disable — always compute on the client (legacy)" }
+    ],
+    "helpText": "Reads the daily/lifetime keys written by the Pvlib loss-rollup job. 'auto' silently falls back to per-minute fetch when keys are absent."
+  },
+  {
+    "id": "lossDailyGridKey",
+    "name": "Daily Grid Loss Key (kWh)",
+    "type": "text",
+    "default": "loss_grid_daily_kwh"
+  },
+  {
+    "id": "lossDailyCurtailKey",
+    "name": "Daily Curtailment Loss Key (kWh)",
+    "type": "text",
+    "default": "loss_curtail_daily_kwh"
+  },
+  {
+    "id": "lossDailyRevenueKey",
+    "name": "Daily Revenue Loss Key (LKR)",
+    "type": "text",
+    "default": "loss_revenue_daily_lkr"
+  },
+  {
+    "id": "lossDailyCurtailRevenueKey",
+    "name": "Daily Curtailment Revenue Loss Key (LKR)",
+    "type": "text",
+    "default": "loss_curtail_revenue_daily_lkr"
+  },
+  {
+    "id": "lossDailyPotentialKey",
+    "name": "Daily Potential Energy Key (kWh)",
+    "type": "text",
+    "default": "potential_energy_daily_kwh"
+  },
+  {
+    "id": "lossDailyExportedKey",
+    "name": "Daily Exported Energy Key (kWh)",
+    "type": "text",
+    "default": "exported_energy_daily_kwh"
+  },
+  {
+    "id": "lossLifetimeAttrPrefix",
+    "name": "Lifetime Attribute Prefix",
+    "type": "text",
+    "default": "loss_",
+    "helpText": "Prefix used to compose the six lifetime attribute names (e.g. loss_grid_lifetime_kwh). Change only if you renamed the attributes."
   },
   {
     "id": "severityMedium",
