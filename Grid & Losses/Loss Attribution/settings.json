@@ -175,6 +175,26 @@
     "helpText": "Prefix used to compose the six lifetime attribute names (e.g. loss_grid_lifetime_kwh). Change only if you renamed the attributes."
   },
   {
+    "id": "pollIntervalMinutes",
+    "name": "Background Refresh Interval (minutes)",
+    "type": "number",
+    "default": 30,
+    "min": 5,
+    "max": 240,
+    "step": 5,
+    "helpText": "Interval at which the card silently refreshes when the selected range includes today. Past-only ranges never auto-refresh. Match this to the service LOSS_TODAY_PARTIAL_INTERVAL_MIN for optimal freshness."
+  },
+  {
+    "id": "attrCacheMinutes",
+    "name": "Capacity / Tariff Cache (minutes)",
+    "type": "number",
+    "default": 30,
+    "min": 1,
+    "max": 240,
+    "step": 1,
+    "helpText": "How long to cache the plant's Capacity and tariff_rate_lkr attributes between fetches. Reducing this increases TB load."
+  },
+  {
     "id": "severityMedium",
     "name": "Severity: Medium Threshold",
     "type": "number",

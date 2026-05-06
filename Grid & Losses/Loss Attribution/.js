@@ -6,8 +6,6 @@ var LOSS_RANGE_PARAM = 'LossAttributionRange';
 var TB_MAX_AVG_INTERVALS = 720;
 var TB_RAW_LIMIT = 50000;
 var RAW_CHUNK_MS = 31 * 24 * 60 * 60 * 1000;
-var SOLAR_DAY_START_HOUR = 5;
-var SOLAR_DAY_END_HOUR = 19;
 var DELTA_NEUTRAL_PCT = 0.1;
 
 self.onInit = function () {
@@ -16,6 +14,18 @@ self.onInit = function () {
     self._calcTimer = null;
     self._calcToken = 0;
     self._rangeBound = false;
+
+    // §5.2 — Refresh-policy state
+    self._hasRendered = false;
+    self._activeRange = null;        // last range key we rendered for
+    self._activeEntityKey = null;    // last entity id+type we rendered for
+    self._cachedAttrs = null;        // { capacity, tariffRate, entityKey, fetchedAt }
+    self._refreshTimer = null;       // setInterval handle
+    self._visibilityHandler = null;  // document.visibilitychange listener
+
+    // Default poll/cache intervals; overridden by settings wired at bottom of onInit
+    self._POLL_INTERVAL_MS = 30 * 60 * 1000;
+    self._ATTR_TTL_MS      = 30 * 60 * 1000;
 
     self._icons = {
         grid: '<svg viewBox="0 0 24 24"><path d="M20 12l-1.41-1.41L13 16.17V4h-2v12.17l-5.58-5.59L4 12l8 8 8-8z"/></svg>',
@@ -81,6 +91,26 @@ self.onInit = function () {
         }
     };
 
+    // Wire pollIntervalMinutes / attrCacheMinutes settings (§5.11)
+    var s0 = self.ctx.settings || {};
+    var pollMin = parseFloat(s0.pollIntervalMinutes);
+    self._POLL_INTERVAL_MS = (isFinite(pollMin) && pollMin >= 1 ? pollMin : 30) * 60 * 1000;
+    var attrMin = parseFloat(s0.attrCacheMinutes);
+    self._ATTR_TTL_MS = (isFinite(attrMin) && attrMin >= 1 ? attrMin : 30) * 60 * 1000;
+
+    // §5.1 — Register range-changed listener ONCE here (not in updateDom)
+    self._onRangeChanged = function (e) {
+        if (!e || !e.detail) return;
+        self._activeRangeOverride = e.detail;
+        storeRangeLocal(e.detail);
+        if (getMode() === 'rangeSelector') return;
+        // Range changed → full refetch with skeleton; restart timer for new range
+        clearRefreshTimer();
+        renderComputedMode({ silent: false });
+        ensureRefreshTimer();
+    };
+    window.addEventListener('loss-range-changed', self._onRangeChanged);
+
     self.updateDom();
     self.onResize();
     self.onDataUpdated();
@@ -115,17 +145,6 @@ self.updateDom = function () {
     if (mode === 'rangeSelector') {
         setupRangeSelector();
     }
-
-    self._onRangeChanged = function(e) {
-        if (e && e.detail) {
-            self._activeRangeOverride = e.detail;
-            storeRangeLocal(e.detail);
-            if (getMode() !== 'rangeSelector') {
-                debouncedComputedRender();
-            }
-        }
-    };
-    window.addEventListener('loss-range-changed', self._onRangeChanged);
 };
 
 self.onDataUpdated = function () {
@@ -134,14 +153,70 @@ self.onDataUpdated = function () {
         renderSelectorRange(getActiveRange());
         return;
     }
-
     var def = getModeDef(mode);
-    if (def.computed) {
-        debouncedComputedRender();
-    } else {
+    if (!def.computed) {
+        // Insurance / latest-value modes: lightweight path, no skeleton storm
         renderLatestValueFallback();
+        return;
     }
+    // Computed modes: DO NOT re-render on every TB tick.
+    // Our own setInterval drives periodic refreshes; TB tick only kicks the timer on first update.
+    ensureRefreshTimer();
 };
+
+// ── Refresh policy helpers (§5.3) ───────────────────────────────────────────
+
+function rangeIncludesToday(range) {
+    if (!range) return false;
+    if (range.mode === 'lifetime') return true;
+    var todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    return parseInt(range.endTs, 10) >= todayStart.getTime();
+}
+
+function ensureRefreshTimer() {
+    // Do an immediate render if we haven't rendered yet
+    if (!self._hasRendered) {
+        renderComputedMode({ silent: false });
+        return;
+    }
+
+    var range = getActiveRange();
+    // No periodic refresh for past-only ranges — data is immutable
+    if (!rangeIncludesToday(range)) return;
+
+    if (self._refreshTimer) return;  // already running
+
+    self._refreshTimer = setInterval(function () {
+        if (document.visibilityState === 'hidden') return;
+        var current = getActiveRange();
+        if (!rangeIncludesToday(current)) {
+            clearRefreshTimer();
+            return;
+        }
+        renderComputedMode({ silent: true });
+    }, self._POLL_INTERVAL_MS);
+
+    // Visibility handler: on tab focus → one immediate silent refresh, then resume
+    if (!self._visibilityHandler) {
+        self._visibilityHandler = function () {
+            if (document.visibilityState === 'visible') {
+                var current = getActiveRange();
+                if (rangeIncludesToday(current)) {
+                    renderComputedMode({ silent: true });
+                }
+            }
+        };
+        document.addEventListener('visibilitychange', self._visibilityHandler);
+    }
+}
+
+function clearRefreshTimer() {
+    if (self._refreshTimer) {
+        clearInterval(self._refreshTimer);
+        self._refreshTimer = null;
+    }
+}
 
 function getMode() {
     return (self.ctx.settings && self.ctx.settings.cardMode) || 'grid';
@@ -149,6 +224,12 @@ function getMode() {
 
 function getModeDef(mode) {
     return (self._modes && self._modes[mode]) || self._modes.grid;
+}
+
+function markComputedRenderComplete(entityKey, rangeKey) {
+    self._hasRendered = true;
+    self._activeEntityKey = entityKey;
+    self._activeRange = rangeKey;
 }
 
 function debouncedComputedRender() {
@@ -159,7 +240,9 @@ function debouncedComputedRender() {
     }, 150);
 }
 
-function renderComputedMode() {
+function renderComputedMode(opts) {
+    opts = opts || {};
+    var silent = !!opts.silent;
     var token = ++self._calcToken;
     var mode = getMode();
     var def = getModeDef(mode);
@@ -171,7 +254,17 @@ function renderComputedMode() {
         return;
     }
 
-    setLoadingState(range);
+    // §5.5 — Skeleton only on first render or entity/range change; never on silent refresh
+    var entityKey = (entity.type || 'ASSET') + ':' + entity.id;
+    var rangeKey  = range.mode + ':' + range.startTs + ':' + range.endTs;
+    var entityChanged = self._activeEntityKey !== entityKey;
+    var rangeChanged  = self._activeRange      !== rangeKey;
+    var firstRender   = !self._hasRendered;
+    var showSkeleton  = !silent && (firstRender || entityChanged || rangeChanged);
+
+    if (showSkeleton) {
+        setLoadingState(range);
+    }
 
     var s = self.ctx.settings || {};
     var useNew = s.useNewLossKeys !== undefined ? s.useNewLossKeys : 'auto';
@@ -181,9 +274,9 @@ function renderComputedMode() {
      *
      * 'off'   → always legacy per-minute path.
      * 'force' → always precomputed; no fallback.
-     * 'auto'  → precomputed UNLESS it's the current calendar day in day mode
-     *            (today: ≤1440 rows, legacy is fine and gives live data).
-     *            If precomputed returns ok=false, fall back to legacy.
+     * 'auto'  → try precomputed first; if absent, allow legacy fallback only for
+     *           day / month / custom ≤ 60 days (§5.7).  Year / lifetime / large custom
+     *           with no precomputed data → ok=false + tooLargeForLegacy=true.
      */
     function calcForRange(rangeObj, attrs) {
         if (useNew === 'off') {
@@ -194,23 +287,34 @@ function renderComputedMode() {
             return calculateLossForRangePrecomputed(entity, rangeObj, attrs);
         }
 
-        // 'auto' (default)
-        if (isCurrentDay(rangeObj)) {
-            // Today's data: use per-minute live path
-            return calculateLossForRange(entity, rangeObj, attrs);
-        }
-
+        // 'auto' (default) — always try precomputed first (§5.7)
         return calculateLossForRangePrecomputed(entity, rangeObj, attrs)
             .then(function (preResult) {
-                if (preResult && preResult.ok) {
-                    return preResult;
+                if (preResult && preResult.ok) return preResult;
+                // Precomputed unavailable — can we fall back safely?
+                if (legacyFallbackAllowed(rangeObj)) {
+                    return calculateLossForRange(entity, rangeObj, attrs);
                 }
-                // Precomputed empty / not yet rolled up → silent fallback
-                return calculateLossForRange(entity, rangeObj, attrs);
+                // Too large for legacy without crashing — signal PENDING state
+                return { ok: false, tooLargeForLegacy: true };
             })
             .catch(function () {
-                return calculateLossForRange(entity, rangeObj, attrs);
+                return legacyFallbackAllowed(rangeObj)
+                    ? calculateLossForRange(entity, rangeObj, attrs)
+                    : { ok: false, tooLargeForLegacy: true };
             });
+    }
+
+    // §5.9 — Gate for large ranges with no precomputed data
+    function legacyFallbackAllowed(rangeObj) {
+        if (!rangeObj) return true;
+        if (rangeObj.mode === 'day' || rangeObj.mode === 'month') return true;
+        if (rangeObj.mode === 'custom') {
+            var spanDays = (parseInt(rangeObj.endTs, 10) - parseInt(rangeObj.startTs, 10)) / 86400000;
+            return spanDays <= 60;
+        }
+        // 'year', 'lifetime' → require precomputed
+        return false;
     }
 
     fetchCalculationAttributes(entity).then(function (attrs) {
@@ -234,13 +338,23 @@ function renderComputedMode() {
     }).then(function (result) {
         if (token !== self._calcToken) return;
         if (!result || !result.primary || !result.primary.ok) {
-            renderLatestValueFallback();
+            markComputedRenderComplete(entityKey, rangeKey);
+            // §5.9 — show PENDING for large ranges with no precomputed data
+            if (result && result.primary && result.primary.tooLargeForLegacy) {
+                showNotRolledUpPlaceholder(range);
+            } else {
+                renderLatestValueFallback();
+            }
             return;
         }
+
+        // Mark state so next silent refresh skips skeleton
+        markComputedRenderComplete(entityKey, rangeKey);
 
         renderComputedResult(mode, def, range, result.attrs, result.primary, result.comparator, result.compRange);
     }).catch(function () {
         if (token === self._calcToken) {
+            markComputedRenderComplete(entityKey, rangeKey);
             renderLatestValueFallback();
         }
     });
@@ -332,6 +446,22 @@ function renderLatestValueFallback() {
         $el.find('.js-tooltip').text(def.tooltip + ' Current value: ' + formattedText + '. Severity: ' + sev.label + '.');
     }
 
+    detectChanges();
+}
+
+// §5.9 — "Not yet rolled up" placeholder for year/lifetime on non-pvlib plants
+function showNotRolledUpPlaceholder(range) {
+    var $el = self.ctx.$widget;
+    var def = getModeDef(getMode());
+    $el.find('.js-value').text('--').removeClass('skeleton');
+    $el.find('.js-status-dot').removeClass('sev-low sev-moderate sev-high').addClass('sev-low');
+    $el.find('.js-status-text').text('PENDING');
+    $el.find('.js-footer-label').text(range && range.label ? range.label : (def.footer || 'Loss Attribution'));
+    $el.find('.js-tooltip').text(
+        'This plant has not been rolled up yet for the selected range. ' +
+        'Ask your operator to enable Loss Attribution roll-up for this asset.'
+    );
+    hideDelta();
     detectChanges();
 }
 
@@ -501,26 +631,29 @@ function calculateLossForRangePrecomputed(entity, range, attrs) {
             var expKwh      = parseFloat(attrMap['exported_energy_lifetime_kwh']);
 
             var hasPotential = isFiniteNumber(potKwh) && potKwh >= 0;
-            var hasGrid      = isFiniteNumber(gridKwh) && gridKwh >= 0;
+            // §5.8 — ok = hasPotential only; treat negative non-potential keys as 0
+            gridKwh    = (isFiniteNumber(gridKwh)    && gridKwh    >= 0) ? gridKwh    : 0;
+            curtailKwh = (isFiniteNumber(curtailKwh) && curtailKwh >= 0) ? curtailKwh : 0;
+            expKwh     = (isFiniteNumber(expKwh)     && expKwh     >= 0) ? expKwh     : 0;
 
             // Fall back to kWh × current tariff if LKR key is missing/negative
             if (!isFiniteNumber(revLkr) || revLkr < 0) {
-                revLkr = isFiniteNumber(gridKwh) && isFiniteNumber(attrs.tariffRate)
+                revLkr = isFiniteNumber(attrs.tariffRate)
                     ? gridKwh * attrs.tariffRate
                     : NaN;
             }
             if (!isFiniteNumber(curtRevLkr) || curtRevLkr < 0) {
-                curtRevLkr = isFiniteNumber(curtailKwh) && isFiniteNumber(attrs.tariffRate)
+                curtRevLkr = isFiniteNumber(attrs.tariffRate)
                     ? curtailKwh * attrs.tariffRate
                     : NaN;
             }
 
             return {
-                ok: hasPotential && hasGrid,
-                grossLossKWh:           isFiniteNumber(gridKwh)    ? gridKwh    : 0,
-                curtailLossKWh:         isFiniteNumber(curtailKwh) ? curtailKwh : 0,
-                potentialEnergyKWh:     isFiniteNumber(potKwh)     ? potKwh     : 0,
-                exportedEnergyKWh:      isFiniteNumber(expKwh)     ? expKwh     : 0,
+                ok: hasPotential,
+                grossLossKWh:           gridKwh,
+                curtailLossKWh:         curtailKwh,
+                potentialEnergyKWh:     isFiniteNumber(potKwh) ? potKwh : 0,
+                exportedEnergyKWh:      expKwh,
                 revenueLossLkr:         revLkr,
                 curtailRevenueLossLkr:  curtRevLkr,
                 bucketMs: 0,
@@ -565,46 +698,36 @@ function calculateLossForRangePrecomputed(entity, range, attrs) {
             var potKwh     = sumKey(potKey);
             var expKwh     = sumKey(expKey);
 
+            // §5.8 — ok = hasPotential only; treat negative non-potential keys as 0
             var hasPotential = potKwh >= 0;
-            var hasGrid      = gridKwh >= 0;
+            gridKwh    = gridKwh    >= 0 ? gridKwh    : 0;
+            curtailKwh = curtailKwh >= 0 ? curtailKwh : 0;
+            expKwh     = expKwh     >= 0 ? expKwh     : 0;
 
             // Fall back to kWh × current tariff when LKR key is missing/sentinel
             if (revLkr < 0) {
-                revLkr = gridKwh >= 0 && isFiniteNumber(attrs.tariffRate)
+                revLkr = isFiniteNumber(attrs.tariffRate)
                     ? gridKwh * attrs.tariffRate
                     : NaN;
             }
             if (curtRevLkr < 0) {
-                curtRevLkr = curtailKwh >= 0 && isFiniteNumber(attrs.tariffRate)
+                curtRevLkr = isFiniteNumber(attrs.tariffRate)
                     ? curtailKwh * attrs.tariffRate
                     : NaN;
             }
 
             return {
-                ok: hasPotential && hasGrid,
-                grossLossKWh:           gridKwh    >= 0 ? gridKwh    : 0,
-                curtailLossKWh:         curtailKwh >= 0 ? curtailKwh : 0,
-                potentialEnergyKWh:     potKwh     >= 0 ? potKwh     : 0,
-                exportedEnergyKWh:      expKwh     >= 0 ? expKwh     : 0,
+                ok: hasPotential,
+                grossLossKWh:           gridKwh,
+                curtailLossKWh:         curtailKwh,
+                potentialEnergyKWh:     potKwh >= 0 ? potKwh : 0,
+                exportedEnergyKWh:      expKwh,
                 revenueLossLkr:         revLkr,
                 curtailRevenueLossLkr:  curtRevLkr,
                 bucketMs: 0,
                 fromPrecomputed: true
             };
         });
-}
-
-/**
- * Return true when range.mode === 'day' AND the start date is today (current calendar day).
- * These ranges bypass the precomputed path and use per-minute fetch.
- */
-function isCurrentDay(range) {
-    if (!range || range.mode !== 'day') return false;
-    var rangeStart = new Date(parseInt(range.startTs, 10));
-    var today = new Date();
-    return rangeStart.getFullYear() === today.getFullYear() &&
-           rangeStart.getMonth()    === today.getMonth()    &&
-           rangeStart.getDate()     === today.getDate();
 }
 
 function calculateLossForRange(entity, range, attrs) {
@@ -776,16 +899,30 @@ function getBucketMsForRange(range) {
 
 function fetchCalculationAttributes(entity) {
     var s = self.ctx.settings || {};
+    var entityKey = (entity.type || 'ASSET') + ':' + entity.id;
+    var now = Date.now();
+
+    // §5.6 — Return cached attrs when entity unchanged and TTL not expired
+    if (self._cachedAttrs &&
+        self._cachedAttrs.entityKey === entityKey &&
+        (now - self._cachedAttrs.fetchedAt) < self._ATTR_TTL_MS) {
+        return Promise.resolve(self._cachedAttrs);
+    }
+
     var keys = uniqueList([
         s.plantCapacityKey || 'Capacity',
         s.tariffAttributeKey || 'tariff_rate_lkr'
     ]);
 
     return fetchAttributesWithFallback(entity, keys).then(function (attrs) {
-        return {
-            capacity: getAttr(attrs, s.plantCapacityKey || 'Capacity'),
-            tariffRate: parseFloat(getAttr(attrs, s.tariffAttributeKey || 'tariff_rate_lkr'))
+        var out = {
+            capacity:   getAttr(attrs, s.plantCapacityKey || 'Capacity'),
+            tariffRate: parseFloat(getAttr(attrs, s.tariffAttributeKey || 'tariff_rate_lkr')),
+            entityKey:  entityKey,
+            fetchedAt:  now
         };
+        self._cachedAttrs = out;
+        return out;
     });
 }
 
@@ -1158,8 +1295,8 @@ function normalizeRange(range) {
 
 function buildDayRange(date, labelOverride) {
     var d = date || new Date();
-    var start = new Date(d.getFullYear(), d.getMonth(), d.getDate(), SOLAR_DAY_START_HOUR, 0, 0, 0);
-    var end = new Date(d.getFullYear(), d.getMonth(), d.getDate(), SOLAR_DAY_END_HOUR, 0, 0, 0);
+    var start = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0);
+    var end = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999);
     var label = labelOverride || (isSameDay(d, new Date()) ? 'Today' : formatDateInput(d));
     return { mode: 'day', startTs: start.getTime(), endTs: end.getTime(), label: label, updatedAt: Date.now() };
 }
@@ -1429,7 +1566,12 @@ self.onDestroy = function () {
         self._calcTimer = null;
     }
     self._calcToken++;
+    clearRefreshTimer();
     if (self._onRangeChanged) {
         window.removeEventListener('loss-range-changed', self._onRangeChanged);
+    }
+    if (self._visibilityHandler) {
+        document.removeEventListener('visibilitychange', self._visibilityHandler);
+        self._visibilityHandler = null;
     }
 };

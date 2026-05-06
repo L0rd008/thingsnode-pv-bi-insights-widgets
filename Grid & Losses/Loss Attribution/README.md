@@ -95,9 +95,9 @@ The widget supports a pre-computed fast path powered by the **Pvlib loss-rollup 
 
 ### How it works
 
-The Pvlib-Service computes and writes the following keys once per day (00:10 local time):
+The Pvlib-Service computes and writes the following keys once per day (00:10 local time). When the today-partial cron is enabled, it rewrites today's local-midnight row during daylight hours so current day/month/year cards can stay fresh without per-minute browser integration.
 
-- **Daily timeseries keys** (one record per plant per calendar day, timestamped at local midnight): `loss_grid_daily_kwh`, `loss_curtail_daily_kwh`, `loss_revenue_daily_lkr`, `loss_curtail_revenue_daily_lkr`, `potential_energy_daily_kwh`, `exported_energy_daily_kwh`.
+- **Daily timeseries keys** (one record per plant per local calendar day, timestamped at local midnight): `loss_grid_daily_kwh`, `loss_curtail_daily_kwh`, `loss_revenue_daily_lkr`, `loss_curtail_revenue_daily_lkr`, `loss_tariff_rate_lkr_at_compute`, `potential_energy_daily_kwh`, `exported_energy_daily_kwh`.
 - **Lifetime SERVER_SCOPE attributes** (cumulative since commissioning): `loss_grid_lifetime_kwh`, `loss_curtail_lifetime_kwh`, `loss_revenue_lifetime_lkr`, `loss_curtail_revenue_lifetime_lkr`, `potential_energy_lifetime_kwh`, `exported_energy_lifetime_kwh`.
 
 For month/year ranges the widget reads ~30/365 daily rows and sums them in the browser — fast compared to 44 000+ minute rows. For lifetime it reads a single attribute value.
@@ -106,15 +106,32 @@ For month/year ranges the widget reads ~30/365 daily rows and sums them in the b
 
 | Value | Behaviour |
 |---|---|
-| `auto` (default) | Use precomputed keys when available. If the keys are absent (plant not yet rolled up) fall back silently to the legacy per-minute path. Today's current-day range always uses per-minute data regardless of this setting. |
+| `auto` (default) | Try precomputed daily/lifetime keys first. If absent, fall back to the legacy per-minute path only for day/month/custom ranges up to 60 days; year/lifetime/large custom ranges show `PENDING` instead of starting a request storm. Today uses the server-side today-partial daily row when present. |
 | `force` | Always use precomputed keys. If they are absent, render `--` placeholders (no fallback). |
 | `off` | Always use the legacy per-minute compute path. |
 
 ### Fallback chain
 
 1. Precomputed daily/lifetime keys (fast) — if `useNewLossKeys` ≠ `"off"`.
-2. Per-minute timeseries fetch + client-side integration (legacy) — on any failure or when keys are absent in `auto` mode.
+2. Per-minute timeseries fetch + client-side integration (legacy) — only when `useNewLossKeys = "off"` or when `auto` needs fallback for day/month/custom ranges up to 60 days.
 3. `DS[0]` latest-value fallback — if telemetry fetch fails entirely.
+
+### Refresh policy
+
+The widget manages its own refresh timer and ignores ThingsBoard's per-minute `onDataUpdated` ticks for computed modes. This prevents the skeleton storm described in the round-2 audit (bugs B1/B2/B3).
+
+| Trigger | Skeleton? | When |
+|---|---|---|
+| First render after `onInit` | Yes | Immediately |
+| Range change via range-selector card | Yes | On each change |
+| Entity (plant) change | Yes | On entity switch |
+| Periodic background refresh | **No** | Every `pollIntervalMinutes` (default 30) while tab is visible AND range includes today |
+| Tab becomes visible after being hidden | **No** | One immediate silent refetch |
+| Past-only ranges (endTs < today midnight) | — | No periodic refresh; data is immutable |
+
+The visibility-change listener pauses polls while the tab is hidden and fires one catch-up render on focus return. The timer is cleaned up in `onDestroy`.
+
+When `useNewLossKeys = "auto"` and precomputed keys are absent for a `year` or `lifetime` range, the widget shows `--` / `PENDING` instead of triggering a per-minute TB storm on the legacy path. Day and month ranges still fall back to the legacy per-bucket path.
 
 ### Enabling server-side aggregation
 
