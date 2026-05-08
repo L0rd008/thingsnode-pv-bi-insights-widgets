@@ -233,8 +233,9 @@ function fetchAndRenderAll(opts) {
 
         var pr = result.primary;
         if (!pr.ok) {
+            if (pr.invalidPotential) setAllSectionsModelInvalid(range);
             if (pr.tooLargeForLegacy) setAllSectionsPending(range);
-            else setAllSectionsPlaceholder();
+            else if (!pr.invalidPotential) setAllSectionsPlaceholder();
             return;
         }
         renderAllSections(result.attrs, pr, result.comp, result.compRange, range);
@@ -362,6 +363,19 @@ function setAllSectionsPending(range) {
         $sec.find('.js-dot').removeClass('sev-low sev-moderate sev-high').addClass('sev-low');
         $sec.find('.js-status').text('PENDING');
         $sec.find('.js-footer').text(range && range.label ? range.label : 'Loss Attribution');
+        $sec.find('.js-delta').css('visibility','hidden');
+    });
+}
+
+function setAllSectionsModelInvalid(range) {
+    var $el = self.ctx.$widget;
+    ['grid','curtail','revenue','curtailRevenue'].forEach(function (mode) {
+        var $sec = $el.find('.lau-mode-' + mode);
+        $sec.find('.js-value').text('--').removeClass('skeleton');
+        $sec.find('.js-dot').removeClass('sev-low sev-moderate sev-high').addClass('sev-high');
+        $sec.find('.js-status').text('MODEL');
+        $sec.find('.js-footer').text(range && range.label ? range.label : 'Potential model invalid');
+        $sec.find('.js-tooltip').text('Potential power invalid: exported power is materially above modeled potential.');
         $sec.find('.js-delta').css('visibility','hidden');
     });
 }
@@ -696,6 +710,10 @@ function calculateLossForRange(entity, range, attrs) {
             }
         }
 
+        if (potentialImplausiblyLow(exportedKw, potentialKw, capacityKw)) {
+            return { ok: false, invalidPotential: true };
+        }
+
         var hPerBucket = bucketMs / 3600000;
 
         setpointSeries.sort(function (a, b) {
@@ -767,6 +785,22 @@ function bucketAverage(series, startTs, endTs, bucketMs, skipNegative) {
         out[b] = hits[b] > 0 ? (sum[b] / hits[b]) : null;
     }
     return out;
+}
+
+function potentialImplausiblyLow(exportedKw, potentialKw, capacityKw) {
+    var ratios = [];
+    var minExportKw = Math.max((isFiniteNumber(capacityKw) ? capacityKw * 0.20 : 0), 100);
+    for (var i = 0; i < exportedKw.length; i++) {
+        var expV = exportedKw[i];
+        var potV = i < potentialKw.length ? potentialKw[i] : null;
+        if (isFiniteNumber(expV) && isFiniteNumber(potV) && potV > 0 && expV >= minExportKw) {
+            ratios.push(expV / potV);
+        }
+    }
+    if (ratios.length < 6) return false;
+    ratios.sort(function (a, b) { return a - b; });
+    var median = ratios[Math.floor(ratios.length / 2)];
+    return median > 2.0;
 }
 
 function getSetpointPct(series, ts) {

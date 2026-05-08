@@ -77,6 +77,7 @@ var _savedOverflows = [];     /* ancestor overflow values saved while calendar i
 var _calendarRepositionHandler = null;
 var _intervalOverrideMs = null; /* null = auto (timeframe-based); number = manual override in ms */
 var _tbPotentialAvailable = false; /* true when valid TB physics data found for the current period */
+var _tbPotentialInvalid = false; /* true when TB physics is implausibly below exported power */
 
 /* ── Timeframe display labels ── */
 var TF_LABELS = {
@@ -1110,6 +1111,24 @@ function getMedianValue(values) {
     return (sorted[mid - 1] + sorted[mid]) / 2;
 }
 
+function isPotentialImplausiblyLow(exportedKw, potentialKw, capacityKw) {
+    var ratios = [];
+    var minExportKw = Math.max((isFinite(capacityKw) && capacityKw > 0) ? capacityKw * 0.20 : 0, 100);
+    var n = Math.max(exportedKw ? exportedKw.length : 0, potentialKw ? potentialKw.length : 0);
+
+    for (var i = 0; i < n; i++) {
+        var expV = (exportedKw && i < exportedKw.length) ? exportedKw[i] : null;
+        var potV = (potentialKw && i < potentialKw.length) ? potentialKw[i] : null;
+        if (expV == null || potV == null || !isFinite(expV) || !isFinite(potV)) continue;
+        if (expV < minExportKw || potV <= 0) continue;
+        ratios.push(expV / potV);
+    }
+
+    if (ratios.length < 6) return false;
+    var medianRatio = getMedianValue(ratios);
+    return medianRatio !== null && medianRatio > 2.0;
+}
+
 function buildPotentialCurveFromWindow(pointCount, capacityKw, firstOn, lastOn) {
     var potential = new Array(pointCount).fill(null);
     if (firstOn < 0 || lastOn < firstOn || pointCount <= 0) return potential;
@@ -1576,6 +1595,7 @@ function fetchLiveData() {
 function processLiveTimeSeries(rawData, minTime, maxTime, bucketMs, historyPowerData, tbPotentialData) {
     isLiveData = true;
     updateStatusBadge('live');
+    _tbPotentialInvalid = false;
 
     var actualKeys = parseCommaList(s.actualPowerKeys);
     var spKeys     = parseCommaList(s.setpointKeys);
@@ -1665,8 +1685,14 @@ function processLiveTimeSeries(rawData, minTime, maxTime, bucketMs, historyPower
                 }
             }
             if (anyPotValid) {
-                tbPotentialUsed = true;
-                _tbPotentialAvailable = true;
+                if (isPotentialImplausiblyLow(dataExportedKw, dataPotentialKw, capacityKw)) {
+                    dataPotentialKw = new Array(N).fill(null);
+                    _tbPotentialInvalid = true;
+                    _tbPotentialAvailable = false;
+                } else {
+                    tbPotentialUsed = true;
+                    _tbPotentialAvailable = true;
+                }
             }
         }
     }
@@ -1883,7 +1909,7 @@ function updateSummary(potentialKw, exportedKw, ceilingKw, bucketMs, capacityKw)
 
     var hPerBucket = bucketMs / 3600000;
     var dec        = parseInt(s.decimals) || 1;
-    var canPotential = hasPotentialData();
+    var canPotential = hasPotentialData() || _tbPotentialInvalid;
     var hasModeledPotential = canPotential && !!(potentialKw && potentialKw.some(function (v) { return v !== null; }));
 
     var totalExportedKWh  = 0;
@@ -1955,6 +1981,10 @@ function updateSummary(potentialKw, exportedKw, ceilingKw, bucketMs, capacityKw)
         ? (' · ' + (_tbPotentialAvailable ? 'TB Physics' : 'Sine Model'))
         : '';
     var html = '<span class="sb-item sb-label">' + statusStr + potSrcLabel + '</span>';
+    if (_tbPotentialInvalid) {
+        html += '<span class="sb-sep">|</span>';
+        html += '<span class="sb-item sb-muted">TB potential invalid</span>';
+    }
 
     if (hasModeledPotential && totalLossKWh > 0.001) {
         html += '<span class="sb-sep">|</span>';
@@ -2002,8 +2032,11 @@ function updateSummary(potentialKw, exportedKw, ceilingKw, bucketMs, capacityKw)
         html += '<span class="sb-sep">|</span>';
         html += '<span class="sb-item sb-muted">No potential data — configure potential_power key or use day view for sine model</span>';
     } else if (!hasModeledPotential) {
+        var waitReason = _tbPotentialInvalid
+            ? ' (potential model invalid)'
+            : (!_tbPotentialAvailable && canModelPotential() ? ' (sine model needs production data)' : ' (no TB physics data in this window)');
         html += '<span class="sb-sep">|</span>';
-        html += '<span class="sb-item sb-muted">Waiting for potential data' + (!_tbPotentialAvailable && canModelPotential() ? ' (sine model needs production data)' : ' (no TB physics data in this window)') + '</span>';
+        html += '<span class="sb-item sb-muted">Waiting for potential data' + waitReason + '</span>';
     } else if (curtailedLossKWh <= 0.001 && totalLossKWh <= 0.001 && excessKWh <= 0.001) {
         html += '<span class="sb-sep">|</span>';
         html += '<span class="sb-item sb-ok">No losses detected</span>';
