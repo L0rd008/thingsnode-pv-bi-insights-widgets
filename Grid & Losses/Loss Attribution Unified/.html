@@ -1,0 +1,165 @@
+<!-- Loss Attribution Unified Panel — Single-fetch, all-modes widget -->
+<div class="lau-panel">
+
+    <!-- ── RANGE SELECTOR SECTION ────────────────────────────────── -->
+    <div class="lau-section lau-range">
+        <div class="lau-accent-bar"></div>
+        <div class="lau-section-header">
+            <div class="lau-icon">
+                <svg viewBox="0 0 24 24"><path d="M7 2h2v2h6V2h2v2h3v18H4V4h3V2zm11 8H6v10h12V10z"/></svg>
+            </div>
+            <span class="lau-title">LOSS RANGE</span>
+        </div>
+        <div class="lau-range-body">
+            <select class="lau-range-select js-range-mode-select">
+                <option value="day">Day</option>
+                <option value="month" selected>Month</option>
+                <option value="year">Year</option>
+                <option value="lifetime">Lifetime</option>
+                <option value="custom">Custom Range</option>
+            </select>
+            <div class="lau-range-inputs">
+                <input class="lau-range-input js-day-input"          type="date" />
+                <input class="lau-range-input js-month-input"        type="month" />
+                <input class="lau-range-input js-year-input"         type="number" min="1990" max="2100" step="1" />
+                <input class="lau-range-input lau-custom js-custom-start" type="date" />
+                <input class="lau-range-input lau-custom js-custom-end"   type="date" />
+            </div>
+        </div>
+        <div class="lau-section-footer">
+            <span class="lau-footer-label js-range-label">Current Month</span>
+        </div>
+        <div class="lau-tooltip-container">
+            <div class="lau-tooltip-content">Selects the time range applied to all Loss Attribution metrics.</div>
+        </div>
+    </div>
+
+    <div class="lau-divider"></div>
+
+    <!-- ── GRID AVAILABILITY LOSS ─────────────────────────────────── -->
+    <div class="lau-section lau-mode-grid" data-mode="grid">
+        <div class="lau-accent-bar"></div>
+        <div class="lau-section-header">
+            <div class="lau-icon">
+                <svg viewBox="0 0 24 24"><path d="M20 12l-1.41-1.41L13 16.17V4h-2v12.17l-5.58-5.59L4 12l8 8 8-8z"/></svg>
+            </div>
+            <span class="lau-title">GRID AVAILABILITY LOSS</span>
+            <div class="lau-status-group">
+                <span class="lau-dot js-dot"></span>
+                <span class="lau-status-text js-status">--</span>
+            </div>
+        </div>
+        <div class="lau-section-body">
+            <span class="lau-value skeleton js-value">--</span>
+            <span class="lau-sub js-sub">Due to Grid Outage</span>
+        </div>
+        <div class="lau-section-footer">
+            <span class="lau-footer-label js-footer">Operational Loss</span>
+            <span class="lau-delta js-delta">
+                <span class="lau-delta-arrow js-delta-arrow"></span>
+                <span class="lau-delta-val js-delta-val">--%</span>
+                <span class="lau-delta-lbl js-delta-lbl"></span>
+            </span>
+        </div>
+        <div class="lau-tooltip-container">
+            <div class="lau-tooltip-content js-tooltip">Gross missing energy from potential power minus exported power.</div>
+        </div>
+    </div>
+
+    <div class="lau-divider"></div>
+
+    <!-- ── CURTAILMENT LOSS ───────────────────────────────────────── -->
+    <div class="lau-section lau-mode-curtail" data-mode="curtail">
+        <div class="lau-accent-bar"></div>
+        <div class="lau-section-header">
+            <div class="lau-icon">
+                <svg viewBox="0 0 24 24"><path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"/></svg>
+            </div>
+            <span class="lau-title">CURTAILMENT LOSS</span>
+            <div class="lau-status-group">
+                <span class="lau-dot js-dot"></span>
+                <span class="lau-status-text js-status">--</span>
+            </div>
+        </div>
+        <div class="lau-section-body">
+            <span class="lau-value skeleton js-value">--</span>
+            <span class="lau-sub js-sub">Export Limits Imposed</span>
+        </div>
+        <div class="lau-section-footer">
+            <span class="lau-footer-label js-footer">Operational Loss</span>
+            <span class="lau-delta js-delta">
+                <span class="lau-delta-arrow js-delta-arrow"></span>
+                <span class="lau-delta-val js-delta-val">--%</span>
+                <span class="lau-delta-lbl js-delta-lbl"></span>
+            </span>
+        </div>
+        <div class="lau-tooltip-container">
+            <div class="lau-tooltip-content js-tooltip">Energy loss during active setpoint limits.</div>
+        </div>
+    </div>
+
+    <div class="lau-divider"></div>
+
+    <!-- ── REVENUE LOSS ───────────────────────────────────────────── -->
+    <div class="lau-section lau-mode-revenue" data-mode="revenue">
+        <div class="lau-accent-bar"></div>
+        <div class="lau-section-header">
+            <div class="lau-icon">
+                <svg viewBox="0 0 24 24"><path d="M11.8 10.9c-2.27-.59-3-1.2-3-2.15 0-1.09 1.01-1.85 2.7-1.85 1.78 0 2.44.85 2.5 2.1h2.21c-.07-1.72-1.12-3.3-3.21-3.81V3h-3v2.16c-1.94.42-3.5 1.68-3.5 3.61 0 2.31 1.91 3.46 4.7 4.13 2.5.6 3 1.48 3 2.41 0 .69-.49 1.79-2.7 1.79-2.06 0-2.87-.92-2.98-2.1h-2.2c.12 2.19 1.76 3.42 3.68 3.83V21h3v-2.15c1.95-.37 3.5-1.5 3.5-3.55 0-2.84-2.43-3.81-4.7-4.4z"/></svg>
+            </div>
+            <span class="lau-title">REVENUE LOSS</span>
+            <div class="lau-status-group">
+                <span class="lau-dot js-dot"></span>
+                <span class="lau-status-text js-status">--</span>
+            </div>
+        </div>
+        <div class="lau-section-body">
+            <span class="lau-value skeleton js-value">--</span>
+            <span class="lau-sub js-sub">Tariff Rated Loss</span>
+        </div>
+        <div class="lau-section-footer">
+            <span class="lau-footer-label js-footer">Financial Loss</span>
+            <span class="lau-delta js-delta">
+                <span class="lau-delta-arrow js-delta-arrow"></span>
+                <span class="lau-delta-val js-delta-val">--%</span>
+                <span class="lau-delta-lbl js-delta-lbl"></span>
+            </span>
+        </div>
+        <div class="lau-tooltip-container">
+            <div class="lau-tooltip-content js-tooltip">Gross missing energy multiplied by the plant tariff rate.</div>
+        </div>
+    </div>
+
+    <div class="lau-divider"></div>
+
+    <!-- ── CURTAILMENT REVENUE LOSS ───────────────────────────────── -->
+    <div class="lau-section lau-mode-curtailRevenue" data-mode="curtailRevenue">
+        <div class="lau-accent-bar"></div>
+        <div class="lau-section-header">
+            <div class="lau-icon">
+                <svg viewBox="0 0 24 24"><path d="M11.8 10.9c-2.27-.59-3-1.2-3-2.15 0-1.09 1.01-1.85 2.7-1.85 1.78 0 2.44.85 2.5 2.1h2.21c-.07-1.72-1.12-3.3-3.21-3.81V3h-3v2.16c-1.94.42-3.5 1.68-3.5 3.61 0 2.31 1.91 3.46 4.7 4.13 2.5.6 3 1.48 3 2.41 0 .69-.49 1.79-2.7 1.79-2.06 0-2.87-.92-2.98-2.1h-2.2c.12 2.19 1.76 3.42 3.68 3.83V21h3v-2.15c1.95-.37 3.5-1.5 3.5-3.55 0-2.84-2.43-3.81-4.7-4.4z"/></svg>
+            </div>
+            <span class="lau-title">CURTAILMENT REVENUE LOSS</span>
+            <div class="lau-status-group">
+                <span class="lau-dot js-dot"></span>
+                <span class="lau-status-text js-status">--</span>
+            </div>
+        </div>
+        <div class="lau-section-body">
+            <span class="lau-value skeleton js-value">--</span>
+            <span class="lau-sub js-sub">Financial Impact of Limits</span>
+        </div>
+        <div class="lau-section-footer">
+            <span class="lau-footer-label js-footer">Financial Loss</span>
+            <span class="lau-delta js-delta">
+                <span class="lau-delta-arrow js-delta-arrow"></span>
+                <span class="lau-delta-val js-delta-val">--%</span>
+                <span class="lau-delta-lbl js-delta-lbl"></span>
+            </span>
+        </div>
+        <div class="lau-tooltip-container">
+            <div class="lau-tooltip-content js-tooltip">Curtailment energy loss multiplied by the plant tariff rate.</div>
+        </div>
+    </div>
+
+</div>

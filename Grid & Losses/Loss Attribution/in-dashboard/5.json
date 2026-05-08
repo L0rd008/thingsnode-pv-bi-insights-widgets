@@ -1,0 +1,86 @@
+{
+  "widget": {
+    "typeFullFqn": "tenant.loss_attribution",
+    "type": "latest",
+    "sizeX": 7.5,
+    "sizeY": 3,
+    "config": {
+      "datasources": [
+        {
+          "type": "entity",
+          "name": "",
+          "entityAliasId": "d4a5c0eb-dffc-de0f-0473-1da49ff4aa39",
+          "dataKeys": [
+            {
+              "name": "latestVal",
+              "type": "timeseries",
+              "label": "latestVal",
+              "color": "#2196f3",
+              "settings": {}
+            }
+          ],
+          "alarmFilterConfig": {
+            "statusList": [
+              "ACTIVE"
+            ]
+          }
+        }
+      ],
+      "showTitle": false,
+      "backgroundColor": "#FFFFFF00",
+      "color": "rgba(0, 0, 0, 0.87)",
+      "padding": "0px",
+      "settings": {
+        "cardMode": "rangeSelector",
+        "currencySym": "LKR",
+        "energyUnit": "MWh",
+        "decimals": 1,
+        "actualPowerKeys": "active_power",
+        "setpointKeys": "setpoint_active_power, curtailment_limit, power_limit",
+        "potentialPowerKeys": "potential_power",
+        "tariffAttributeKey": "tariff_rate_lkr",
+        "plantCapacityKey": "Capacity",
+        "capacityUnit": "kW",
+        "fallbackPower": 1000,
+        "lifetimeStartAttributeKey": "commissioning_date",
+        "lifetimeStartDate": "2020-10-01"
+      },
+      "title": "Attributes card",
+      "decimals": null,
+      "dropShadow": false,
+      "enableFullscreen": true,
+      "enableDataExport": false,
+      "widgetStyle": {},
+      "widgetCss": "",
+      "pageSize": 1024,
+      "noDataDisplayMessage": ""
+    },
+    "row": 0,
+    "col": 0,
+    "id": "a9bb216b-960b-7d39-5db4-b05c8e4a0e23"
+  },
+  "aliasesInfo": {
+    "datasourceAliases": {
+      "0": {
+        "alias": "VPE Plant",
+        "filter": {
+          "type": "singleEntity",
+          "resolveMultiple": false,
+          "singleEntity": {
+            "entityType": "ASSET",
+            "id": "4ecf4f30-8d29-11f0-80cf-4d04f6ff8b7b"
+          }
+        }
+      }
+    },
+    "targetDeviceAlias": null
+  },
+  "filtersInfo": {
+    "datasourceFilters": {}
+  },
+  "originalSize": {
+    "sizeX": 24,
+    "sizeY": 15
+  },
+  "originalColumns": 128
+}

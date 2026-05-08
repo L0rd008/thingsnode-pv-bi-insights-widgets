@@ -1,0 +1,373 @@
+/* ═══════════════════════════════════════════════════════════════════
+   Loss Attribution Unified Panel
+   ThingsBoard v4.3.0 PE | Latest Values | Single-fetch, all modes
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* ── Design tokens ─────────────────────────────────────────────── */
+.lau-panel {
+    --c-bg:           linear-gradient(180deg, rgba(2,10,67,0.97) 0%, rgba(5,20,50,0.97) 100%);
+    --c-text:         #FFFFFF;
+    --c-text-dim:     #B0BEC5;
+    --c-text-muted:   #90A4AE;
+    --c-divider:      rgba(255,255,255,0.07);
+    --c-border:       rgba(255,202,40,0.32);      /* amber — grid mode drives the panel border */
+    --c-glow:         rgba(255,202,40,0.10);
+    --c-tooltip-bg:   rgba(202,218,221,0.93);
+    --c-good:         #66BB6A;
+    --c-warning:      #FFC107;
+    --c-critical:     #FF5252;
+    --c-neutral:      #B0BEC5;
+
+    /* Mode accent colors */
+    --c-range:        #26C6DA;
+    --c-grid:         #FFCA28;
+    --c-curtail:      #EF5350;
+    --c-revenue:      #FF7043;
+    --c-curtailRev:   #FF8A65;
+
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: row;
+    align-items: stretch;
+    background: var(--c-bg);
+    border: 2px solid var(--c-border);
+    box-shadow: 0 0 18px var(--c-glow), inset 0 0 18px rgba(0,0,0,0.45);
+    border-radius: 8px;
+    box-sizing: border-box;
+    overflow: hidden;
+    font-family: 'Roboto', sans-serif;
+    color: var(--c-text);
+    transition: border-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+.lau-panel:hover {
+    box-shadow: 0 0 30px rgba(255,202,40,0.18), inset 0 0 8px rgba(0,0,0,0.25);
+}
+
+/* ── Vertical divider ──────────────────────────────────────────── */
+.lau-divider {
+    width: 1px;
+    flex-shrink: 0;
+    background: var(--c-divider);
+    align-self: stretch;
+}
+
+/* ── Section base ──────────────────────────────────────────────── */
+.lau-section {
+    flex: 1 1 0;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    padding: 0.45em 0.65em 0.35em;
+    box-sizing: border-box;
+    position: relative;
+    overflow: hidden;
+    transition: background 0.25s ease;
+}
+
+.lau-section:hover {
+    background: rgba(255,255,255,0.032);
+}
+
+/* Range section is narrower */
+.lau-range {
+    flex: 0 0 17%;
+    max-width: 17%;
+}
+
+/* ── Top accent bar ────────────────────────────────────────────── */
+.lau-accent-bar {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 2.5px;
+    border-radius: 0;
+    transition: opacity 0.3s ease;
+    opacity: 0.75;
+}
+
+.lau-section:hover .lau-accent-bar {
+    opacity: 1;
+}
+
+.lau-range        .lau-accent-bar { background: var(--c-range); }
+.lau-mode-grid    .lau-accent-bar { background: var(--c-grid); }
+.lau-mode-curtail .lau-accent-bar { background: var(--c-curtail); }
+.lau-mode-revenue .lau-accent-bar { background: var(--c-revenue); }
+.lau-mode-curtailRevenue .lau-accent-bar { background: var(--c-curtailRev); }
+
+/* ── Section hover glow ────────────────────────────────────────── */
+.lau-mode-grid:hover         { box-shadow: inset 0 0 20px rgba(255,202,40,0.06); }
+.lau-mode-curtail:hover      { box-shadow: inset 0 0 20px rgba(239,83,80,0.06); }
+.lau-mode-revenue:hover      { box-shadow: inset 0 0 20px rgba(255,112,67,0.06); }
+.lau-mode-curtailRevenue:hover { box-shadow: inset 0 0 20px rgba(255,138,101,0.06); }
+.lau-range:hover             { box-shadow: inset 0 0 20px rgba(38,198,218,0.06); }
+
+/* ── Section header ────────────────────────────────────────────── */
+.lau-section-header {
+    display: flex;
+    align-items: center;
+    gap: 0.3em;
+    flex: 0 0 auto;
+    margin-top: 0.18em;
+    margin-bottom: 0.08em;
+    min-height: 0;
+    line-height: 1;
+}
+
+.lau-icon {
+    flex-shrink: 0;
+    width: 1.1em;
+    height: 1.1em;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0.8;
+    transition: opacity 0.25s ease;
+}
+
+.lau-section:hover .lau-icon { opacity: 1; }
+
+.lau-icon svg {
+    width: 100%;
+    height: 100%;
+    fill: currentColor;
+}
+
+.lau-mode-grid    .lau-icon { color: var(--c-grid); }
+.lau-mode-curtail .lau-icon { color: var(--c-curtail); }
+.lau-mode-revenue .lau-icon { color: var(--c-revenue); }
+.lau-mode-curtailRevenue .lau-icon { color: var(--c-curtailRev); }
+.lau-range        .lau-icon { color: var(--c-range); }
+
+.lau-title {
+    flex: 1;
+    min-width: 0;
+    font-size: 0.62em;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--c-text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    text-shadow: 0 1px 3px rgba(0,0,0,0.8);
+}
+
+.lau-status-group {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    gap: 0.2em;
+}
+
+.lau-dot {
+    width: 0.32em;
+    height: 0.32em;
+    border-radius: 50%;
+    background: var(--c-text-muted);
+    display: inline-block;
+    transition: background 0.4s ease, box-shadow 0.4s ease;
+}
+
+.lau-dot.sev-low      { background: var(--c-good);    box-shadow: 0 0 5px rgba(102,187,106,0.6); }
+.lau-dot.sev-moderate { background: var(--c-warning);  box-shadow: 0 0 5px rgba(255,193,7,0.6); }
+.lau-dot.sev-high     { background: var(--c-critical); box-shadow: 0 0 5px rgba(255,82,82,0.6); animation: lau-pulse-crit 1.8s infinite; }
+
+.lau-status-text {
+    font-size: 0.36em;
+    font-weight: 600;
+    color: var(--c-text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    white-space: nowrap;
+}
+
+/* ── Section body (value) ──────────────────────────────────────── */
+.lau-section-body {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    min-height: 0;
+}
+
+.lau-value {
+    font-size: 1.62em;
+    font-weight: 700;
+    line-height: 1.1;
+    white-space: nowrap;
+    transition: color 0.3s ease, transform 0.2s ease;
+}
+
+.lau-section:hover .lau-value { transform: scale(1.03); }
+
+.lau-mode-grid    .lau-value { color: var(--c-grid);       text-shadow: 0 0 12px rgba(255,202,40,0.25); }
+.lau-mode-curtail .lau-value { color: var(--c-curtail);    text-shadow: 0 0 12px rgba(239,83,80,0.25); }
+.lau-mode-revenue .lau-value { color: var(--c-revenue);    text-shadow: 0 0 12px rgba(255,112,67,0.25); }
+.lau-mode-curtailRevenue .lau-value { color: var(--c-curtailRev); text-shadow: 0 0 12px rgba(255,138,101,0.25); }
+
+.lau-sub {
+    font-size: 0.48em;
+    color: var(--c-text-muted);
+    font-weight: 400;
+    margin-top: 0.18em;
+    line-height: 1.2;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* ── Range section body ────────────────────────────────────────── */
+.lau-range-body {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 0.35em;
+    min-height: 0;
+}
+
+.lau-range-select {
+    width: 100%;
+    height: 2em;
+    border-radius: 5px;
+    border: 1px solid rgba(38,198,218,0.3);
+    background: rgba(2,10,67,0.9);
+    color: var(--c-range);
+    font-family: inherit;
+    font-size: 0.85em;
+    font-weight: 700;
+    padding: 0 0.4em;
+    cursor: pointer;
+    box-sizing: border-box;
+    outline: none;
+    transition: border-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+.lau-range-select:focus {
+    border-color: var(--c-range);
+    box-shadow: 0 0 8px rgba(38,198,218,0.25);
+}
+
+.lau-range-inputs {
+    display: flex;
+    align-items: center;
+    gap: 0.3em;
+}
+
+.lau-range-input {
+    display: none;
+    min-width: 0;
+    width: 100%;
+    height: 1.9em;
+    border-radius: 5px;
+    border: 1px solid rgba(255,255,255,0.14);
+    background: rgba(255,255,255,0.07);
+    color: var(--c-text);
+    font-family: inherit;
+    font-size: 0.8em;
+    font-weight: 600;
+    padding: 0 0.4em;
+    box-sizing: border-box;
+}
+
+.lau-range-input.lau-custom { width: 50%; }
+
+.lau-range-input::-webkit-calendar-picker-indicator {
+    filter: invert(1);
+    opacity: 0.65;
+}
+
+/* ── Section footer ────────────────────────────────────────────── */
+.lau-section-footer {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.3em;
+    padding-top: 0.12em;
+    border-top: 1px solid rgba(255,255,255,0.05);
+    min-height: 0;
+    margin-top: 0.1em;
+}
+
+.lau-footer-label {
+    font-size: 0.4em;
+    font-weight: 500;
+    color: var(--c-text-dim);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    opacity: 0.75;
+}
+
+/* ── Delta indicator ───────────────────────────────────────────── */
+.lau-delta {
+    display: flex;
+    align-items: center;
+    gap: 0.15em;
+    font-size: 0.4em;
+    font-weight: 700;
+    line-height: 1;
+    white-space: nowrap;
+    visibility: hidden;
+}
+
+.lau-delta.delta-good    { color: var(--c-good);     visibility: visible; }
+.lau-delta.delta-bad     { color: var(--c-critical); visibility: visible; }
+.lau-delta.delta-neutral { color: var(--c-neutral);  visibility: visible; }
+
+.lau-delta-lbl { color: var(--c-text-dim); font-weight: 500; }
+
+/* ── Tooltip slide-up ──────────────────────────────────────────── */
+.lau-tooltip-container {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    padding: 0.4em 0.55em;
+    background: var(--c-tooltip-bg);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    transform: translateY(100%);
+    opacity: 0;
+    transition: all 0.28s ease;
+    z-index: 10;
+    pointer-events: none;
+    border-bottom-left-radius: 6px;
+    border-bottom-right-radius: 6px;
+}
+
+.lau-section:hover .lau-tooltip-container {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+.lau-tooltip-content {
+    font-size: 0.48em;
+    color: #1a1a2e;
+    font-weight: 600;
+    line-height: 1.3;
+}
+
+/* ── Skeleton loading animation ────────────────────────────────── */
+.skeleton {
+    opacity: 0.45;
+    animation: lau-pulse 1.5s infinite;
+}
+
+/* ── Keyframes ─────────────────────────────────────────────────── */
+@keyframes lau-pulse {
+    0%   { opacity: 0.3; }
+    50%  { opacity: 0.6; }
+    100% { opacity: 0.3; }
+}
+
+@keyframes lau-pulse-crit {
+    0%   { box-shadow: 0 0 4px rgba(255,82,82,0.6); }
+    50%  { box-shadow: 0 0 10px rgba(255,82,82,0.9); }
+    100% { box-shadow: 0 0 4px rgba(255,82,82,0.6); }
+}

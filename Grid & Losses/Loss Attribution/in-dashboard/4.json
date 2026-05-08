@@ -1,0 +1,127 @@
+{
+  "widget": {
+    "typeFullFqn": "tenant.loss_attribution",
+    "type": "latest",
+    "sizeX": 7.5,
+    "sizeY": 3,
+    "config": {
+      "datasources": [
+        {
+          "type": "entity",
+          "name": "",
+          "entityAliasId": "31678d04-5bbd-0a1e-c2a3-ddfa647b1c48",
+          "dataKeys": [
+            {
+              "name": "active_power",
+              "type": "timeseries",
+              "label": "active_power",
+              "color": "#2196f3",
+              "settings": {}
+            },
+            {
+              "name": "potential_power",
+              "type": "timeseries",
+              "label": "potential_power",
+              "color": "#4caf50",
+              "settings": {},
+              "aggregationType": "NONE",
+              "units": null,
+              "decimals": null,
+              "funcBody": null,
+              "usePostProcessing": null,
+              "postFuncBody": null
+            },
+            {
+              "name": "setpoint_active_power",
+              "type": "timeseries",
+              "label": "setpoint_active_power",
+              "color": "#f44336",
+              "settings": {}
+            },
+            {
+              "name": "Capacity",
+              "type": "attribute",
+              "label": "Capacity",
+              "color": "#ffc107",
+              "settings": {}
+            },
+            {
+              "name": "tariff_rate_lkr",
+              "type": "attribute",
+              "label": "tariff_rate_lkr",
+              "color": "#607d8b",
+              "settings": {},
+              "aggregationType": null,
+              "units": null,
+              "decimals": null,
+              "funcBody": null,
+              "usePostProcessing": null,
+              "postFuncBody": null
+            }
+          ],
+          "alarmFilterConfig": {
+            "statusList": [
+              "ACTIVE"
+            ]
+          }
+        }
+      ],
+      "showTitle": false,
+      "backgroundColor": "#FFFFFF00",
+      "color": "rgba(0, 0, 0, 0.87)",
+      "padding": "0",
+      "settings": {
+        "cardMode": "curtailRevenue",
+        "currencySym": "LKR",
+        "energyUnit": "MWh",
+        "decimals": 1,
+        "actualPowerKeys": "active_power",
+        "setpointKeys": "setpoint_active_power, curtailment_limit, power_limit",
+        "potentialPowerKeys": "potential_power",
+        "tariffAttributeKey": "tariff_rate_lkr",
+        "plantCapacityKey": "Capacity",
+        "capacityUnit": "kW",
+        "fallbackPower": 1000,
+        "lifetimeStartAttributeKey": "commissioning_date",
+        "lifetimeStartDate": "2020-10-01"
+      },
+      "title": "Attributes card",
+      "decimals": null,
+      "dropShadow": false,
+      "enableFullscreen": true,
+      "enableDataExport": true,
+      "widgetStyle": {},
+      "widgetCss": "",
+      "pageSize": 1024,
+      "noDataDisplayMessage": ""
+    },
+    "row": 0,
+    "col": 0,
+    "id": "472e995f-f1bb-6909-d1ee-822156ff1f81"
+  },
+  "aliasesInfo": {
+    "datasourceAliases": {
+      "0": {
+        "alias": "SelectedAsset",
+        "filter": {
+          "type": "stateEntity",
+          "resolveMultiple": true,
+          "stateEntityParamName": "SelectedAsset",
+          "defaultStateEntity": {
+            "entityType": "ASSET",
+            "id": "78fda490-e08b-11f0-b68f-8f33a9d74e0c"
+          }
+        }
+      }
+    },
+    "targetDeviceAlias": null
+  },
+  "filtersInfo": {
+    "datasourceFilters": {}
+  },
+  "originalSize": {
+    "sizeX": 37,
+    "sizeY": 15
+  },
+  "originalColumns": 128
+}

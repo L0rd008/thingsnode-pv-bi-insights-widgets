@@ -1,0 +1,94 @@
+{
+  "widget": {
+    "typeFullFqn": "tenant.loss_attribution_unified",
+    "type": "latest",
+    "sizeX": 37.5,
+    "sizeY": 3,
+    "config": {
+      "datasources": [
+        {
+          "type": "entity",
+          "name": "",
+          "entityAliasId": "31678d04-5bbd-0a1e-c2a3-ddfa647b1c48",
+          "dataKeys": [
+            {
+              "name": "Capacity",
+              "type": "attribute",
+              "label": "Capacity",
+              "color": "#2196f3",
+              "settings": {}
+            }
+          ],
+          "alarmFilterConfig": {
+            "statusList": ["ACTIVE"]
+          }
+        }
+      ],
+      "showTitle": false,
+      "backgroundColor": "#00000000",
+      "color": "rgba(255, 255, 255, 0.87)",
+      "padding": "0px",
+      "settings": {
+        "currencySym": "LKR",
+        "energyUnit": "MWh",
+        "decimals": 1,
+        "actualPowerKeys": "active_power",
+        "setpointKeys": "setpoint_active_power",
+        "potentialPowerKeys": "potential_power",
+        "tariffAttributeKey": "tariff_rate_lkr",
+        "plantCapacityKey": "Capacity",
+        "capacityUnit": "kW",
+        "fallbackPower": 1000,
+        "lifetimeStartAttributeKey": "commissioning_date",
+        "lifetimeStartDate": "2020-10-01",
+        "useNewLossKeys": "auto",
+        "pollIntervalMinutes": 30,
+        "attrCacheMinutes": 30,
+        "severityMedium": 100,
+        "severityHigh": 500
+      },
+      "title": "Loss Attribution",
+      "decimals": null,
+      "useDashboardTimewindow": false,
+      "showTitleIcon": false,
+      "titleTooltip": "",
+      "dropShadow": false,
+      "enableFullscreen": true,
+      "enableDataExport": false,
+      "borderRadius": "8px",
+      "widgetStyle": {},
+      "widgetCss": "",
+      "titleStyle": {
+        "fontSize": "16px",
+        "fontWeight": 400
+      },
+      "pageSize": 1024,
+      "noDataDisplayMessage": ""
+    },
+    "row": 0,
+    "col": 0,
+    "id": "dc3ed581-c648-4812-8561-5ab4c28c8bdc"
+  },
+  "aliasesInfo": {
+    "datasourceAliases": {
+      "0": {
+        "alias": "SelectedAsset",
+        "filter": {
+          "type": "stateEntity",
+          "resolveMultiple": true,
+          "stateEntityParamName": "SelectedAsset",
+          "defaultStateEntity": null
+        }
+      }
+    },
+    "targetDeviceAlias": null
+  },
+  "filtersInfo": {
+    "datasourceFilters": {}
+  },
+  "originalSize": {
+    "sizeX": 175,
+    "sizeY": 15
+  },
+  "originalColumns": 128
+}

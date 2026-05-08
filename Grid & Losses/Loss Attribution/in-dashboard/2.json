@@ -1,0 +1,101 @@
+{
+  "widget": {
+    "typeFullFqn": "tenant.loss_attribution",
+    "type": "latest",
+    "sizeX": 7.5,
+    "sizeY": 3,
+    "config": {
+      "datasources": [
+        {
+          "type": "entity",
+          "name": "",
+          "entityAliasId": "31678d04-5bbd-0a1e-c2a3-ddfa647b1c48",
+          "dataKeys": [
+            {
+              "name": "active_power",
+              "type": "timeseries",
+              "label": "active_power",
+              "color": "#2196f3",
+              "settings": {}
+            },
+            {
+              "name": "potential_power",
+              "type": "timeseries",
+              "label": "potential_power",
+              "color": "#4caf50",
+              "settings": {}
+            },
+            {
+              "name": "tariff_rate_lkr",
+              "type": "attribute",
+              "label": "tariff_rate_lkr",
+              "color": "#f44336",
+              "settings": {}
+            }
+          ],
+          "alarmFilterConfig": {
+            "statusList": [
+              "ACTIVE"
+            ]
+          }
+        }
+      ],
+      "showTitle": false,
+      "backgroundColor": "#020A4300",
+      "color": "rgba(0, 0, 0, 0.87)",
+      "padding": "0px",
+      "settings": {
+        "cardMode": "revenue",
+        "customTitle": "REVENUE LOSS (POTENTIAL)",
+        "currencySym": "LKR",
+        "energyUnit": "MWh",
+        "decimals": 3
+      },
+      "title": "Attributes card",
+      "decimals": null,
+      "showTitleIcon": false,
+      "titleTooltip": "",
+      "dropShadow": false,
+      "enableFullscreen": false,
+      "enableDataExport": true,
+      "margin": "0",
+      "borderRadius": "8",
+      "widgetStyle": {},
+      "widgetCss": "",
+      "titleStyle": {
+        "fontSize": "16px",
+        "fontWeight": 400
+      },
+      "pageSize": 1024,
+      "noDataDisplayMessage": ""
+    },
+    "row": 0,
+    "col": 0,
+    "id": "136eac76-3839-5ddf-7b74-a6ea6196a9f9"
+  },
+  "aliasesInfo": {
+    "datasourceAliases": {
+      "0": {
+        "alias": "SelectedAsset",
+        "filter": {
+          "type": "stateEntity",
+          "resolveMultiple": true,
+          "stateEntityParamName": "SelectedAsset",
+          "defaultStateEntity": {
+            "entityType": "ASSET",
+            "id": "78fda490-e08b-11f0-b68f-8f33a9d74e0c"
+          }
+        }
+      }
+    },
+    "targetDeviceAlias": null
+  },
+  "filtersInfo": {
+    "datasourceFilters": {}
+  },
+  "originalSize": {
+    "sizeX": 37,
+    "sizeY": 15
+  },
+  "originalColumns": 128
+}
