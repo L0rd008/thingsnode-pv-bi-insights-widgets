@@ -74,6 +74,13 @@ self.onDataUpdated = function () {
         return;
     }
 
+    // ── MTD mode: fetch daily P50 + actual timeseries for current month ──
+    var fdiMode = (s.fdiMode || 'mtd').toLowerCase();
+    if (fdiMode === 'mtd') {
+        fetchMtdData();
+        return;
+    }
+
     // ── Guard: no data at all ──
     if (!self.ctx.data || self.ctx.data.length === 0 ||
         !self.ctx.data[0].data || self.ctx.data[0].data.length === 0) {
@@ -110,6 +117,72 @@ self.onDataUpdated = function () {
     // ── Tier 2: DERIVED mode — DS[0] = actual, use attribute for P50 ──
     tryAttributeDerived(ds0Val, s);
 };
+
+// ──────────────────────────────────────────────────
+//  MTD mode: fetch daily timeseries for current month
+// ──────────────────────────────────────────────────
+function fetchMtdData() {
+    try {
+        if (!self.ctx.datasources || self.ctx.datasources.length === 0) {
+            showPlaceholder();
+            return;
+        }
+        var ds = self.ctx.datasources[0];
+        var entityId = ds.entityId;
+        var entityType = ds.entityType;
+        var entIdStr = (typeof entityId === 'object') ? entityId.id : entityId;
+        var entTypeStr = (typeof entityType === 'string') ? entityType : entityId.entityType;
+        if (!entIdStr) { showPlaceholder(); return; }
+
+        var now = new Date();
+        var monthStart = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0).getTime();
+        var endTs = Date.now();
+
+        var p50Key  = s.forecastP50DailyKey || 'forecast_p50_daily';
+        var actKey  = s.actualDailyKey || 'total_generation_expected_kwh';
+
+        var url = '/api/plugins/telemetry/' + entTypeStr + '/' + entIdStr +
+            '/values/timeseries?keys=' + p50Key + ',' + actKey +
+            '&startTs=' + monthStart + '&endTs=' + endTs +
+            '&limit=100&agg=NONE&orderBy=ASC';
+
+        self.ctx.http.get(url).subscribe(
+            function (data) {
+                var p50Rows = data[p50Key] || [];
+                var actRows = data[actKey] || [];
+
+                if (p50Rows.length === 0) {
+                    // No P50 data — fall back to derived
+                    showPlaceholder();
+                    return;
+                }
+
+                // Sum P50 (MWh) → convert to kWh for same unit as actual
+                var sumP50Kwh = 0;
+                for (var i = 0; i < p50Rows.length; i++) {
+                    var v = parseFloat(p50Rows[i].value);
+                    if (!isNaN(v)) sumP50Kwh += v * 1000; // MWh → kWh
+                }
+
+                // Sum actual (kWh)
+                var sumActKwh = 0;
+                for (var j = 0; j < actRows.length; j++) {
+                    var a = parseFloat(actRows[j].value);
+                    if (!isNaN(a)) sumActKwh += a;
+                }
+
+                if (sumP50Kwh <= 0) { showPlaceholder(); return; }
+
+                var unit = s.unitLabel || 'MWh';
+                var fdiPct = ((sumActKwh - sumP50Kwh) / sumP50Kwh) * 100;
+                var displayForecast = unit === 'MWh' ? sumP50Kwh / 1000 : sumP50Kwh;
+                var displayActual   = unit === 'MWh' ? sumActKwh  / 1000 : sumActKwh;
+                applyDeviation(fdiPct, displayActual, displayForecast, 'mtd');
+            },
+            function () { showPlaceholder(); }
+        );
+    } catch (e) { showPlaceholder(); }
+}
 
 // ──────────────────────────────────────────────────
 //  Tier 2: Attribute fallback (derive P50 from annual)

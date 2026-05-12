@@ -7,6 +7,27 @@
         "helpText": "Header title for the card."
     },
     {
+        "id": "fdiMode",
+        "name": "FDI Mode",
+        "type": "text",
+        "default": "mtd",
+        "helpText": "'live' = latest-value DS[0]/DS[1] ratio. 'mtd' = month-to-date cumulative P50 vs actual (recommended). 'derived' = single-value vs annual P50/365."
+    },
+    {
+        "id": "forecastP50DailyKey",
+        "name": "P50 Daily Forecast Key",
+        "type": "text",
+        "default": "forecast_p50_daily",
+        "helpText": "Telemetry key for daily P50 forecast (MWh). Used in mtd mode to sum month-to-date P50."
+    },
+    {
+        "id": "actualDailyKey",
+        "name": "Actual Daily Energy Key",
+        "type": "text",
+        "default": "total_generation_expected_kwh",
+        "helpText": "Telemetry key for actual daily energy (kWh). Used in mtd mode."
+    },
+    {
         "id": "footerText",
         "name": "Footer Description",
         "type": "text",

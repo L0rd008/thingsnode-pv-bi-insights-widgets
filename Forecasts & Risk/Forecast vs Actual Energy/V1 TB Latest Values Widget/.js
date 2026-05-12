@@ -132,19 +132,19 @@ function initChart() {
                     order: 4,
                     spanGaps: true
                 },
-                /* DS 1: P75 Forecast — amber dashed */
+                /* DS 1: P95 Forecast — deep red dashed (outer risk) */
                 {
-                    label: 'P75 Forecast',
+                    label: 'P95 Forecast',
                     data: [],
-                    borderColor: '#FFC107',
+                    borderColor: '#FF1744',
                     borderWidth: 1.5,
-                    borderDash: [6, 4],
+                    borderDash: [4, 4],
                     pointRadius: 0,
                     pointHoverRadius: 3,
-                    pointHoverBackgroundColor: '#FFC107',
+                    pointHoverBackgroundColor: '#FF1744',
                     fill: false,
                     tension: 0.25,
-                    order: 3,
+                    order: 2,
                     spanGaps: true
                 },
                 /* DS 2: P90 Forecast — red dashed */
@@ -348,18 +348,18 @@ function fetchLiveData() {
         return;
     }
 
-    var windowDays = parseInt(s.windowDays) || 30;
+    var windowDays = parseInt(s.windowDays) || 365;
     var now = Date.now();
     var startTs = now - (windowDays * 24 * 60 * 60 * 1000);
 
     /* ── Tier 1: Try fetching real forecast telemetry ── */
     var p50Key    = s.forecastP50Key      || 'forecast_p50_daily';
-    var p75Key    = s.forecastP75Key      || 'forecast_p75_daily';
     var p90Key    = s.forecastP90Key      || 'forecast_p90_daily';
+    var p95Key    = s.forecastP95Key      || 'forecast_p95_daily';
     var actKey    = s.actualEnergyKey     || 'total_generation';
     var pvlibKey  = s.pvlibExpectedKey    || 'total_generation_expected_kwh';
 
-    var allKeys = [actKey, p50Key, p75Key, p90Key, pvlibKey].join(',');
+    var allKeys = [actKey, p50Key, p90Key, p95Key, pvlibKey].join(',');
 
     var url = '/api/plugins/telemetry/' + entTypeStr + '/' + entIdStr +
         '/values/timeseries?keys=' + allKeys +
@@ -460,27 +460,27 @@ function processLiveData(data, s) {
 
     var actKey   = s.actualEnergyKey  || 'total_generation';
     var p50Key   = s.forecastP50Key   || 'forecast_p50_daily';
-    var p75Key   = s.forecastP75Key   || 'forecast_p75_daily';
     var p90Key   = s.forecastP90Key   || 'forecast_p90_daily';
+    var p95Key   = s.forecastP95Key   || 'forecast_p95_daily';
     var pvlibKey = s.pvlibExpectedKey || 'total_generation_expected_kwh';
     var unit = s.unitLabel || 'MWh';
 
     /* ── Parse each key into daily buckets ── */
     var actuals   = parseTsToDailyMap(data[actKey]   || []);
     var p50Vals   = parseTsToDailyMap(data[p50Key]   || []);
-    var p75Vals   = parseTsToDailyMap(data[p75Key]   || []);
     var p90Vals   = parseTsToDailyMap(data[p90Key]   || []);
+    var p95Vals   = parseTsToDailyMap(data[p95Key]   || []);
     var pvlibVals = parseTsToDailyMap(data[pvlibKey] || []);
 
     /* ── Build aligned date labels ── */
-    var allDates = mergeKeys(actuals, p50Vals, p75Vals, p90Vals, pvlibVals);
+    var allDates = mergeKeys(actuals, p50Vals, p90Vals, p95Vals, pvlibVals);
     allDates.sort();
 
     var labels = [];
     var dataActual = [];
     var dataP50 = [];
-    var dataP75 = [];
     var dataP90 = [];
+    var dataP95 = [];
     var dataBand = [];
     var dataPvlib = [];
 
@@ -489,17 +489,16 @@ function processLiveData(data, s) {
         labels.push(formatDateLabel(day));
         dataActual.push(actuals[day]   != null ? actuals[day]   : null);
         dataP50.push(p50Vals[day]      != null ? p50Vals[day]   : null);
-        dataP75.push(p75Vals[day]      != null ? p75Vals[day]   : null);
         dataP90.push(p90Vals[day]      != null ? p90Vals[day]   : null);
+        dataP95.push(p95Vals[day]      != null ? p95Vals[day]   : null);
         dataBand.push(p50Vals[day]     != null ? p50Vals[day]   : null);
-        /* pvlib stores kWh — convert to display unit (default MWh: /1000) */
         var pvlibRaw = pvlibVals[day];
         dataPvlib.push(pvlibRaw != null ? (unit === 'MWh' ? pvlibRaw / 1000 : pvlibRaw) : null);
     }
 
-    renderChart(labels, dataP50, dataP75, dataP90, dataBand, dataActual, dataPvlib);
-    updateRiskState(dataActual, dataP50, dataP75, s);
-    updateTooltipSummary(dataActual, dataP50, dataP75, dataP90, s);
+    renderChart(labels, dataP50, dataP90, dataP95, dataBand, dataActual, dataPvlib);
+    updateRiskState(dataActual, dataP50, dataP90, s);
+    updateTooltipSummary(dataActual, dataP50, dataP90, dataP95, s);
 }
 
 /* ────────── TIER 2: DERIVED MODE ────────── */
@@ -704,39 +703,36 @@ function renderChart(labels, p50, p75, p90, band, actual, pvlib) {
    RISK STATE DETECTION
    ═══════════════════════════════════════════════════ */
 
-function updateRiskState(actual, p50, p75, s) {
+function updateRiskState(actual, p50, p90, s) {
     cacheDom();
 
-    /* Find last non-null actual value */
     var latestActual = null;
     var latestP50 = null;
-    var latestP75 = null;
+    var latestP90 = null;
 
     for (var i = actual.length - 1; i >= 0; i--) {
         if (actual[i] != null) {
             latestActual = actual[i];
             latestP50 = p50[i];
-            latestP75 = p75[i];
+            latestP90 = p90[i];
             break;
         }
     }
 
     if (latestActual == null || latestP50 == null) return;
 
-    /* Classify risk state */
+    /* ON TRACK: actual >= P50 | WARNING: P90 <= actual < P50 | CRITICAL: actual < P90 */
     var riskState;
     if (latestActual >= latestP50) {
         riskState = 'good';
-    } else if (latestActual >= latestP75) {
+    } else if (latestP90 != null && latestActual >= latestP90) {
         riskState = 'warning';
     } else {
         riskState = 'critical';
     }
 
-    /* Update risk badge */
     $statusDot.removeClass('good warning critical nodata derived simulated');
     $statusDot.addClass(riskState);
-
     var riskLabels = { good: 'ON TRACK', warning: 'WARNING', critical: 'CRITICAL' };
     $statusText.text(riskLabels[riskState] || '--');
 }

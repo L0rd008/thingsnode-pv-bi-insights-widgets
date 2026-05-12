@@ -17,8 +17,8 @@
         "id": "windowDays",
         "name": "Rolling Window (Days)",
         "type": "number",
-        "default": 30,
-        "helpText": "Number of past days to display. Common: 7, 14, 30, 90."
+        "default": 365,
+        "helpText": "Number of past days to display. 365 = full 12-month view (recommended for P-value analysis). Common: 30, 90, 365."
     },
     {
         "id": "actualEnergyKey",
@@ -35,11 +35,11 @@
         "helpText": "Telemetry key for daily P50 forecast. Leave default if not yet available."
     },
     {
-        "id": "forecastP75Key",
-        "name": "P75 Forecast Telemetry Key",
+        "id": "forecastP95Key",
+        "name": "P95 Forecast Telemetry Key",
         "type": "text",
-        "default": "forecast_p75_daily",
-        "helpText": "Telemetry key for daily P75 forecast."
+        "default": "forecast_p95_daily",
+        "helpText": "Telemetry key for daily P95 forecast (outer risk band). Written by pvalue_job.py."
     },
     {
         "id": "forecastP90Key",
@@ -56,18 +56,11 @@
         "helpText": "Server attribute key for annual P50 energy (kWh). Used as fallback to derive daily forecasts."
     },
     {
-        "id": "p75AttributeKey",
-        "name": "P75 Annual Energy Attribute",
+        "id": "p95AttributeKey",
+        "name": "P95 Annual Energy Attribute",
         "type": "text",
-        "default": "p75_energy",
-        "helpText": "Server attribute key for annual P75 energy (kWh)."
-    },
-    {
-        "id": "p90AttributeKey",
-        "name": "P90 Annual Energy Attribute",
-        "type": "text",
-        "default": "p90_energy",
-        "helpText": "Server attribute key for annual P90 energy (kWh)."
+        "default": "p95_energy",
+        "helpText": "Server attribute key for annual P95 energy (kWh). Used as outer-band fallback in derived mode."
     },
     {
         "id": "baseDailyEnergy",
@@ -88,7 +81,7 @@
         "name": "Show Confidence Band",
         "type": "switch",
         "default": true,
-        "helpText": "Toggle the shaded area between P50 and P90 on the chart."
+        "helpText": "Toggle the shaded risk bands between P50→P90 (inner) and P50→P95 (outer) on the chart."
     },
     {
         "id": "accentColor",
