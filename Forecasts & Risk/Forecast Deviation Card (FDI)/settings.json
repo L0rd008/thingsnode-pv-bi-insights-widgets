@@ -4,35 +4,35 @@
         "name": "Card Title",
         "type": "text",
         "default": "FDI vs P50 (%)",
-        "helpText": "Header title for the card."
+        "helpText": "Header title. Set to 'FDI vs P50', 'FDI vs P90', or 'FDI vs P95' for multi-instance dashboard."
     },
     {
         "id": "fdiMode",
         "name": "FDI Mode",
         "type": "text",
         "default": "mtd",
-        "helpText": "'live' = latest-value DS[0]/DS[1] ratio. 'mtd' = month-to-date cumulative P50 vs actual (recommended). 'derived' = single-value vs annual P50/365."
+        "helpText": "'mtd' = month-to-date cumulative forecast vs actual (recommended). 'live' = latest-value DS[0]/DS[1] ratio. 'derived' = single-value vs annual P/365."
     },
     {
-        "id": "forecastP50DailyKey",
-        "name": "P50 Daily Forecast Key",
+        "id": "forecastDailyKey",
+        "name": "Forecast Daily Key (P50 / P90 / P95)",
         "type": "text",
         "default": "forecast_p50_daily",
-        "helpText": "Telemetry key for daily P50 forecast (MWh). Used in mtd mode to sum month-to-date P50."
+        "helpText": "The P-value key this instance compares against. Set to 'forecast_p50_daily', 'forecast_p90_daily', or 'forecast_p95_daily' to create 3 separate dashboard instances."
     },
     {
         "id": "actualDailyKey",
         "name": "Actual Daily Energy Key",
         "type": "text",
-        "default": "total_generation_expected_kwh",
-        "helpText": "Telemetry key for actual daily energy (kWh). Used in mtd mode."
+        "default": "total_generation",
+        "helpText": "Real meter daily energy key (kWh). Used in MTD mode to sum month-to-date actual generation. Must be actual meter data, NOT pvlib expected."
     },
     {
         "id": "footerText",
         "name": "Footer Description",
         "type": "text",
         "default": "Deviation from Median Expectation",
-        "helpText": "Footer label text."
+        "helpText": "Footer label text. Update to match instance: 'Deviation from P50', 'Deviation from P90', etc."
     },
     {
         "id": "unitLabel",
@@ -49,25 +49,32 @@
         "helpText": "Number of decimal places for deviation percentage and values."
     },
     {
-        "id": "forecastKey",
-        "name": "Forecast Telemetry Key (DS[0])",
+        "id": "forecastP50DailyKey",
+        "name": "P50 Daily Key (legacy fallback)",
         "type": "text",
         "default": "forecast_p50_daily",
-        "helpText": "Telemetry key for the P50 daily forecast value. Mapped to datasource key [0]."
+        "helpText": "Fallback if forecastDailyKey is not set. Use forecastDailyKey instead."
+    },
+    {
+        "id": "forecastKey",
+        "name": "Forecast Telemetry Key (DS[0], live mode)",
+        "type": "text",
+        "default": "forecast_p50_daily",
+        "helpText": "Telemetry key for the P-value daily forecast. Mapped to datasource key [0] in live mode."
     },
     {
         "id": "actualKey",
-        "name": "Actual Telemetry Key (DS[1])",
+        "name": "Actual Telemetry Key (DS[1], live mode)",
         "type": "text",
         "default": "total_generation",
-        "helpText": "Telemetry key for actual daily energy. Mapped to datasource key [1]."
+        "helpText": "Telemetry key for actual daily energy. Mapped to datasource key [1] in live mode."
     },
     {
         "id": "p50AttributeKey",
-        "name": "P50 Annual Energy Attribute",
+        "name": "P50 Annual Energy Attribute (derived mode)",
         "type": "text",
         "default": "p50_energy",
-        "helpText": "Server attribute key for annual P50 energy (kWh). Used for derived mode fallback."
+        "helpText": "Annual P50 energy (kWh) SERVER_SCOPE attribute. Used in derived mode fallback."
     },
     {
         "id": "warningThreshold",

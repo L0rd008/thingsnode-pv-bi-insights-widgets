@@ -124,60 +124,74 @@ self.onDataUpdated = function () {
 function fetchMtdData() {
     try {
         if (!self.ctx.datasources || self.ctx.datasources.length === 0) {
-            showPlaceholder();
-            return;
+            showPlaceholder(); return;
         }
         var ds = self.ctx.datasources[0];
-        var entityId = ds.entityId;
+        var entityId   = ds.entityId;
         var entityType = ds.entityType;
-        var entIdStr = (typeof entityId === 'object') ? entityId.id : entityId;
-        var entTypeStr = (typeof entityType === 'string') ? entityType : entityId.entityType;
+        var entIdStr   = (typeof entityId   === 'object') ? entityId.id         : entityId;
+        var entTypeStr = (typeof entityType === 'string')  ? entityType          : entityId.entityType;
         if (!entIdStr) { showPlaceholder(); return; }
 
-        var now = new Date();
-        var monthStart = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0).getTime();
-        var endTs = Date.now();
+        /* Compute month-start in Asia/Colombo (UTC+5:30 = +330 min).
+           Browser clock may be in a different timezone — apply explicit offset so
+           monthStart aligns with the plant's local midnight (where pvalue_job stamps rows). */
+        var offsetMs = 330 * 60 * 1000;   // +5:30 in ms
+        var nowUtcMs  = Date.now();
+        var nowLocal  = new Date(nowUtcMs + offsetMs);  // "fake" local date in Colombo
+        var monthStartLocal = new Date(
+            Date.UTC(nowLocal.getUTCFullYear(), nowLocal.getUTCMonth(), 1)
+        );  // 1st of current month at 00:00 UTC
+        var monthStartMs = monthStartLocal.getTime() - offsetMs;  // back to true UTC ms = Colombo 00:00
+        var endTs = nowUtcMs;
 
-        var p50Key  = s.forecastP50DailyKey || 'forecast_p50_daily';
-        var actKey  = s.actualDailyKey || 'total_generation_expected_kwh';
+        /* Generic: use forecastDailyKey setting (can be P50, P90, or P95 key per instance) */
+        var fcKey  = s.forecastDailyKey  || s.forecastP50DailyKey || 'forecast_p50_daily';
+        var actKey = s.actualDailyKey    || 'total_generation';
 
         var url = '/api/plugins/telemetry/' + entTypeStr + '/' + entIdStr +
-            '/values/timeseries?keys=' + p50Key + ',' + actKey +
-            '&startTs=' + monthStart + '&endTs=' + endTs +
+            '/values/timeseries?keys=' + fcKey + ',' + actKey +
+            '&startTs=' + monthStartMs + '&endTs=' + endTs +
             '&limit=100&agg=NONE&orderBy=ASC';
 
         self.ctx.http.get(url).subscribe(
             function (data) {
-                var p50Rows = data[p50Key] || [];
+                var fcRows  = data[fcKey]  || [];
                 var actRows = data[actKey] || [];
 
-                if (p50Rows.length === 0) {
-                    // No P50 data — fall back to derived
+                if (fcRows.length === 0) {
+                    /* No forecast rows — fallback to attribute derived mode */
                     showPlaceholder();
                     return;
                 }
 
-                // Sum P50 (MWh) → convert to kWh for same unit as actual
-                var sumP50Kwh = 0;
-                for (var i = 0; i < p50Rows.length; i++) {
-                    var v = parseFloat(p50Rows[i].value);
-                    if (!isNaN(v)) sumP50Kwh += v * 1000; // MWh → kWh
+                /* Sum forecast (MWh) → convert to kWh for same unit as actual */
+                var sumFcKwh = 0;
+                for (var i = 0; i < fcRows.length; i++) {
+                    var v = parseFloat(fcRows[i].value);
+                    if (!isNaN(v)) sumFcKwh += v * 1000;  // MWh → kWh
                 }
 
-                // Sum actual (kWh)
+                /* Sum actual (kWh) */
                 var sumActKwh = 0;
                 for (var j = 0; j < actRows.length; j++) {
                     var a = parseFloat(actRows[j].value);
                     if (!isNaN(a)) sumActKwh += a;
                 }
 
-                if (sumP50Kwh <= 0) { showPlaceholder(); return; }
+                if (sumFcKwh <= 0) { showPlaceholder(); return; }
 
                 var unit = s.unitLabel || 'MWh';
-                var fdiPct = ((sumActKwh - sumP50Kwh) / sumP50Kwh) * 100;
-                var displayForecast = unit === 'MWh' ? sumP50Kwh / 1000 : sumP50Kwh;
-                var displayActual   = unit === 'MWh' ? sumActKwh  / 1000 : sumActKwh;
-                applyDeviation(fdiPct, displayActual, displayForecast, 'mtd');
+                var displayForecast = unit === 'MWh' ? sumFcKwh / 1000 : sumFcKwh;
+                var displayActual   = unit === 'MWh' ? sumActKwh / 1000 : sumActKwh;
+
+                if (actRows.length === 0) {
+                    /* Day 1 or no actual yet — show forecast context, FDI = 0% */
+                    applyDeviation(0, 0, displayForecast, 'mtd');
+                } else {
+                    var fdiPct = ((sumActKwh - sumFcKwh) / sumFcKwh) * 100;
+                    applyDeviation(fdiPct, displayActual, displayForecast, 'mtd');
+                }
             },
             function () { showPlaceholder(); }
         );
