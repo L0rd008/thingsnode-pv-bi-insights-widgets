@@ -1,13 +1,13 @@
 // ════════════════════════════════════════════════════
-// Forecast vs. Actual Energy (30-Day MWh)
+// Forecast vs. Actual Energy
 // ThingsBoard v4.2.1.1 PE | Latest Values Widget
 // Requires: Chart.js via resources.txt
+// viewMode: 'monthly' (default) | 'daily'
 // ════════════════════════════════════════════════════
 
 var myChart = null;
 var baseFontSize = 16;
-var isLiveData = false;
-var dataMode = 'nodata';   // 'live' | 'derived' | 'simulated' | 'nodata'
+var dataMode = 'nodata';   // 'live' | 'derived' | 'simulated' | 'nodata' | 'monthly'
 
 /* ────────── LIFECYCLE: INIT ────────── */
 self.onInit = function () {
@@ -68,7 +68,7 @@ function initChart() {
     var s = self.ctx.settings;
 
     /* ── Apply settings to DOM ── */
-    $el.find('.js-title').text(s.widgetTitle || 'FORECAST vs. ACTUAL ENERGY (30-DAY MWh)');
+    $el.find('.js-title').text(s.widgetTitle || 'FORECAST vs. ACTUAL ENERGY (12-MONTH MWh)');
     $el.find('.js-y-title').text('ENERGY (' + (s.unitLabel || 'MWh') + ')');
 
     if (s.accentColor) {
@@ -325,42 +325,157 @@ function fetchLiveData() {
     cacheDom();
     var s = self.ctx.settings;
 
-    /* Guard: no datasource? */
     if (!self.ctx.datasources || self.ctx.datasources.length === 0) {
-        renderNoData();
-        return;
+        renderNoData(); return;
     }
 
     var ds = self.ctx.datasources[0];
     var entityId = ds.entityId;
     var entityType = ds.entityType;
+    var entIdStr   = (typeof entityId   === 'object') ? entityId.id         : entityId;
+    var entTypeStr = (typeof entityType === 'string')  ? entityType          : entityId.entityType;
 
-    if (!entityId || !entityType) {
-        renderNoData();
-        return;
+    if (!entIdStr || !entTypeStr) { renderNoData(); return; }
+
+    /* Dispatch on viewMode */
+    var viewMode = (s.viewMode || 'monthly').toLowerCase();
+    if (viewMode === 'monthly') {
+        fetchMonthlyData(entIdStr, entTypeStr, s);
+    } else {
+        fetchDailyData(entIdStr, entTypeStr, s);
+    }
+}
+
+/* ────────── MONTHLY FETCH ────────── */
+function fetchMonthlyData(entIdStr, entTypeStr, s) {
+    /* Window: Jan 1 of current year → Dec 31 of current year (full calendar year)
+       Shows past months (actual+P), current month (partial actual+P), future months (P only). */
+    var now   = new Date();
+    var year  = now.getFullYear();
+    var startTs = new Date(year, 0, 1, 0, 0, 0).getTime();   // Jan 1 local
+    var endTs   = new Date(year, 11, 31, 23, 59, 59).getTime(); // Dec 31 local
+
+    var p50MKey = s.forecastP50MonthlyKey || 'forecast_p50_monthly';
+    var p90MKey = s.forecastP90MonthlyKey || 'forecast_p90_monthly';
+    var p95MKey = s.forecastP95MonthlyKey || 'forecast_p95_monthly';
+    var pvlibKey = s.pvlibExpectedKey     || 'total_generation_expected_kwh';
+
+    /* Fetch P-value monthly rows (12 rows, agg=NONE) */
+    var pUrl = '/api/plugins/telemetry/' + entTypeStr + '/' + entIdStr +
+        '/values/timeseries?keys=' + [p50MKey, p90MKey, p95MKey, pvlibKey].join(',') +
+        '&startTs=' + startTs + '&endTs=' + endTs +
+        '&limit=100&agg=NONE';
+
+    /* Fetch actual monthly sums via agg=SUM on active_power (kW → MWh via /60/1000 per min)
+       Use total_generation_expected_kwh daily sums as fallback for plants without active_power. */
+    var actKey   = s.actualEnergyKey || 'active_power';
+    var actFbKey = s.pvlibExpectedKey || 'total_generation_expected_kwh';
+    /* Interval = 30 days in ms; TB will bucket by this window. We'll re-bucket client-side by month. */
+    var aActUrl = '/api/plugins/telemetry/' + entTypeStr + '/' + entIdStr +
+        '/values/timeseries?keys=' + actKey +
+        '&startTs=' + startTs + '&endTs=' + Date.now() +
+        '&limit=100000&agg=NONE';
+
+    try {
+        self.ctx.http.get(pUrl).subscribe(function (pData) {
+            self.ctx.http.get(aActUrl).subscribe(
+                function (aData) {
+                    processMonthlyData(pData, aData, actKey, p50MKey, p90MKey, p95MKey, pvlibKey, s, year);
+                },
+                function () {
+                    processMonthlyData(pData, {}, actKey, p50MKey, p90MKey, p95MKey, pvlibKey, s, year);
+                }
+            );
+        }, function () {
+            tryAttributeFallback(entIdStr, entTypeStr, s);
+        });
+    } catch (e) {
+        tryAttributeFallback(entIdStr, entTypeStr, s);
+    }
+}
+
+/* ────────── MONTHLY DATA PROCESSING ────────── */
+function processMonthlyData(pData, aData, actKey, p50MKey, p90MKey, p95MKey, pvlibKey, s, year) {
+    dataMode = 'monthly';
+    updateStatusBadge();
+
+    var unit = s.unitLabel || 'MWh';
+    var MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+    /* Parse P-value monthly rows → map by month index (0-11) */
+    function pRowsToMonthMap(rows) {
+        var map = {};
+        (rows || []).forEach(function (r) {
+            var d = new Date(parseInt(r.ts));
+            map[d.getMonth()] = parseFloat(r.value);
+        });
+        return map;
+    }
+    var p50Map  = pRowsToMonthMap(pData[p50MKey]);
+    var p90Map  = pRowsToMonthMap(pData[p90MKey]);
+    var p95Map  = pRowsToMonthMap(pData[p95MKey]);
+
+    /* Aggregate actual (active_power kW, 1-min cadence) → monthly MWh
+       kWh per point = kW × (1/60). Sum per month → /1000 → MWh. */
+    var actMonthlyMwh = {};
+    var actRows = aData[actKey] || [];
+    actRows.forEach(function (r) {
+        var v = parseFloat(r.value);
+        if (isNaN(v) || v < 0) return;
+        var mo = new Date(parseInt(r.ts)).getMonth();
+        actMonthlyMwh[mo] = (actMonthlyMwh[mo] || 0) + v / 60.0 / 1000.0;
+    });
+
+    /* Aggregate pvlib expected daily kWh → monthly MWh (fallback actual line) */
+    var pvlibMonthlyMwh = {};
+    var pvRows = pData[pvlibKey] || [];
+    pvRows.forEach(function (r) {
+        var v = parseFloat(r.value);
+        if (isNaN(v) || v < 0) return;
+        var mo = new Date(parseInt(r.ts)).getMonth();
+        pvlibMonthlyMwh[mo] = (pvlibMonthlyMwh[mo] || 0) + v / 1000.0; // kWh→MWh
+    });
+
+    var labels = [], dataP50 = [], dataP90 = [], dataP95 = [], dataBand = [],
+        dataActual = [], dataPvlib = [];
+    var nowMo = new Date().getMonth();
+
+    for (var mo = 0; mo < 12; mo++) {
+        labels.push(MONTH_NAMES[mo] + ' ' + year);
+        dataP50.push(p50Map[mo]  != null ? round(p50Map[mo],  2) : null);
+        dataP90.push(p90Map[mo]  != null ? round(p90Map[mo],  2) : null);
+        dataP95.push(p95Map[mo]  != null ? round(p95Map[mo],  2) : null);
+        dataBand.push(p50Map[mo] != null ? round(p50Map[mo],  2) : null);
+        /* Actual: only for past months + current month (partial). Future = null. */
+        if (mo <= nowMo) {
+            var actMwh = actMonthlyMwh[mo];
+            dataActual.push(actMwh != null && actMwh > 0 ? round(actMwh, 2) : null);
+        } else {
+            dataActual.push(null);
+        }
+        /* pvlib expected line (past+current months) */
+        var pvMwh = pvlibMonthlyMwh[mo];
+        dataPvlib.push(mo <= nowMo && pvMwh > 0 ? round(pvMwh, 2) : null);
     }
 
-    var entIdStr = (typeof entityId === 'object') ? entityId.id : entityId;
-    var entTypeStr = (typeof entityType === 'string') ? entityType : entityId.entityType;
+    renderChart(labels, dataP50, dataP90, dataP95, dataBand, dataActual, dataPvlib);
+    updateRiskState(dataActual, dataP50, dataP90, s);
+    updateTooltipSummary(dataActual, dataP50, dataP90, dataP95, s);
+}
 
-    if (!entIdStr) {
-        renderNoData();
-        return;
-    }
-
+/* ────────── DAILY FETCH (legacy / windowDays mode) ────────── */
+function fetchDailyData(entIdStr, entTypeStr, s) {
     var windowDays = parseInt(s.windowDays) || 365;
     var now = Date.now();
     var startTs = now - (windowDays * 24 * 60 * 60 * 1000);
 
-    /* ── Tier 1: Try fetching real forecast telemetry ── */
-    var p50Key    = s.forecastP50Key      || 'forecast_p50_daily';
-    var p90Key    = s.forecastP90Key      || 'forecast_p90_daily';
-    var p95Key    = s.forecastP95Key      || 'forecast_p95_daily';
-    var actKey    = s.actualEnergyKey     || 'total_generation';
-    var pvlibKey  = s.pvlibExpectedKey    || 'total_generation_expected_kwh';
+    var p50Key   = s.forecastP50Key   || 'forecast_p50_daily';
+    var p90Key   = s.forecastP90Key   || 'forecast_p90_daily';
+    var p95Key   = s.forecastP95Key   || 'forecast_p95_daily';
+    var actKey   = s.actualEnergyKey  || 'total_generation';
+    var pvlibKey = s.pvlibExpectedKey || 'total_generation_expected_kwh';
 
     var allKeys = [actKey, p50Key, p90Key, p95Key, pvlibKey].join(',');
-
     var url = '/api/plugins/telemetry/' + entTypeStr + '/' + entIdStr +
         '/values/timeseries?keys=' + allKeys +
         '&startTs=' + startTs + '&endTs=' + now +
@@ -368,13 +483,8 @@ function fetchLiveData() {
 
     try {
         self.ctx.http.get(url).subscribe(
-            function (data) {
-                handleTelemetryResponse(data, entIdStr, entTypeStr, s);
-            },
-            function () {
-                /* Telemetry fetch failed entirely — try attributes next */
-                tryAttributeFallback(entIdStr, entTypeStr, s);
-            }
+            function (data) { handleTelemetryResponse(data, entIdStr, entTypeStr, s); },
+            function ()     { tryAttributeFallback(entIdStr, entTypeStr, s); }
         );
     } catch (e) {
         tryAttributeFallback(entIdStr, entTypeStr, s);
@@ -412,10 +522,10 @@ function tryAttributeFallback(entIdStr, entTypeStr, s, actualTelemetry) {
 
         var entityObj = { id: entIdStr, entityType: entTypeStr };
         var p50Attr = s.p50AttributeKey || 'p50_energy';
-        var p75Attr = s.p75AttributeKey || 'p75_energy';
         var p90Attr = s.p90AttributeKey || 'p90_energy';
+        var p95Attr = s.p95AttributeKey || 'p95_energy';
 
-        attrService.getEntityAttributes(entityObj, 'SERVER_SCOPE', [p50Attr, p75Attr, p90Attr])
+        attrService.getEntityAttributes(entityObj, 'SERVER_SCOPE', [p50Attr, p90Attr, p95Attr])
             .subscribe(
                 function (attrs) {
                     if (!attrs || attrs.length === 0) {
@@ -429,16 +539,16 @@ function tryAttributeFallback(entIdStr, entTypeStr, s, actualTelemetry) {
                     }
 
                     var p50Val = attrMap[p50Attr];
-                    var p75Val = attrMap[p75Attr];
                     var p90Val = attrMap[p90Attr];
+                    var p95Val = attrMap[p95Attr];
 
                     if (isNaN(p50Val)) {
                         loadSimulation(s);
                         return;
                     }
 
-                    /* Derive daily from annual */
-                    loadDerived(s, p50Val, p75Val || p50Val * 0.947, p90Val || p50Val * 0.900, actualTelemetry);
+                    /* Derive daily from annual (P90 ≈ 97.6% of P50, P95 ≈ 92.4%) */
+                    loadDerived(s, p50Val, p90Val || p50Val * 0.976, p95Val || p50Val * 0.924, actualTelemetry);
                 },
                 function () {
                     loadSimulation(s);
@@ -502,81 +612,66 @@ function processLiveData(data, s) {
 }
 
 /* ────────── TIER 2: DERIVED MODE ────────── */
-function loadDerived(s, annualP50, annualP75, annualP90, actualTelemetry) {
+function loadDerived(s, annualP50, annualP90, annualP95, actualTelemetry) {
     dataMode = 'derived';
     updateStatusBadge();
 
     var windowDays = parseInt(s.windowDays) || 30;
-    var unit = s.unitLabel || 'MWh';
 
     /* Daily baseline from annual kWh → MWh */
     var dailyP50 = (annualP50 / 365) / 1000;
-    var dailyP75 = (annualP75 / 365) / 1000;
     var dailyP90 = (annualP90 / 365) / 1000;
+    var dailyP95 = (annualP95 / 365) / 1000;
 
-    /* Deterministic seeded random for consistent results */
     var seed = 137;
     function seededRandom() {
         seed = (seed * 16807 + 0) % 2147483647;
         return (seed - 1) / 2147483646;
     }
 
-    var labels = [];
-    var dataP50 = [];
-    var dataP75 = [];
-    var dataP90 = [];
-    var dataBand = [];
-    var dataActual = [];
-
-    var now = new Date();
+    var labels = [], dataP50 = [], dataP90 = [], dataP95 = [], dataBand = [], dataActual = [];
+    var now   = new Date();
     var today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
-    /* Parse actual telemetry if available */
     var actualMap = {};
     if (actualTelemetry && actualTelemetry.length > 0) {
         actualMap = parseTsToDailyMap(actualTelemetry);
     }
 
     for (var d = 0; d < windowDays; d++) {
-        var date = new Date(today.getTime() - (windowDays - 1 - d) * 86400000);
+        var date   = new Date(today.getTime() - (windowDays - 1 - d) * 86400000);
         var dayStr = formatDateObj(date);
         labels.push(formatDateLabel(dayStr));
 
-        /* Add seasonal and weather-like variance */
-        var dayOfYear = getDayOfYear(date);
-        var seasonal = 1.0 + 0.12 * Math.sin((dayOfYear - 80) / 365 * 2 * Math.PI);  // peak mid-year
+        var dayOfYear  = getDayOfYear(date);
+        var seasonal   = 1.0 + 0.12 * Math.sin((dayOfYear - 80) / 365 * 2 * Math.PI);
         var cloudNoise = 1.0 + (seededRandom() - 0.5) * 0.08;
 
         var p50 = dailyP50 * seasonal * cloudNoise;
-        var p75 = dailyP75 * seasonal * (1.0 + (seededRandom() - 0.5) * 0.06);
         var p90 = dailyP90 * seasonal * (1.0 + (seededRandom() - 0.5) * 0.05);
+        var p95 = dailyP95 * seasonal * (1.0 + (seededRandom() - 0.5) * 0.04);
 
-        /* Ensure ordering P50 >= P75 >= P90 */
-        if (p75 > p50) p75 = p50 * 0.95;
-        if (p90 > p75) p90 = p75 * 0.95;
+        /* Enforce P50 >= P90 >= P95 */
+        if (p90 > p50) p90 = p50 * 0.976;
+        if (p95 > p90) p95 = p90 * 0.924;
 
         dataP50.push(round(p50, 2));
-        dataP75.push(round(p75, 2));
         dataP90.push(round(p90, 2));
+        dataP95.push(round(p95, 2));
         dataBand.push(round(p50, 2));
 
-        /* Actual: from telemetry if available, else generate */
         if (actualMap[dayStr] != null) {
             dataActual.push(actualMap[dayStr]);
         } else {
-            /* Simulate actual: between P90 and slightly above P50, with weather outliers */
-            var actualBase = p50 * (0.92 + seededRandom() * 0.16);  // ~P50 ± 8%
-            /* Occasional underperformance event (~15% of days) */
-            if (seededRandom() < 0.15) {
-                actualBase *= (0.75 + seededRandom() * 0.15);
-            }
+            var actualBase = p50 * (0.92 + seededRandom() * 0.16);
+            if (seededRandom() < 0.15) actualBase *= (0.75 + seededRandom() * 0.15);
             dataActual.push(round(Math.max(0, actualBase), 2));
         }
     }
 
-    renderChart(labels, dataP50, dataP75, dataP90, dataBand, dataActual);
-    updateRiskState(dataActual, dataP50, dataP75, s);
-    updateTooltipSummary(dataActual, dataP50, dataP75, dataP90, s);
+    renderChart(labels, dataP50, dataP90, dataP95, dataBand, dataActual);
+    updateRiskState(dataActual, dataP50, dataP90, s);
+    updateTooltipSummary(dataActual, dataP50, dataP90, dataP95, s);
 }
 
 /* ────────── TIER 3: PURE SIMULATION ────────── */
@@ -584,11 +679,11 @@ function loadSimulation(s) {
     dataMode = 'simulated';
     updateStatusBadge();
 
-    var windowDays = parseInt(s.windowDays) || 30;
+    var windowDays   = parseInt(s.windowDays)    || 30;
     var baseDailyKwh = parseFloat(s.baseDailyEnergy) || 4110;
-    var dailyP50 = baseDailyKwh / 1000;    // Convert kWh → MWh
-    var dailyP75 = dailyP50 * 0.947;
-    var dailyP90 = dailyP50 * 0.900;
+    var dailyP50 = baseDailyKwh / 1000;    // kWh → MWh
+    var dailyP90 = dailyP50 * 0.976;       // P90 ≈ 97.6% of P50
+    var dailyP95 = dailyP50 * 0.924;       // P95 ≈ 92.4% of P50
 
     var seed = 42;
     function seededRandom() {
@@ -596,52 +691,40 @@ function loadSimulation(s) {
         return (seed - 1) / 2147483646;
     }
 
-    var labels = [];
-    var dataP50 = [];
-    var dataP75 = [];
-    var dataP90 = [];
-    var dataBand = [];
-    var dataActual = [];
-
-    var now = new Date();
+    var labels = [], dataP50 = [], dataP90 = [], dataP95 = [], dataBand = [], dataActual = [];
+    var now   = new Date();
     var today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
     for (var d = 0; d < windowDays; d++) {
-        var date = new Date(today.getTime() - (windowDays - 1 - d) * 86400000);
+        var date   = new Date(today.getTime() - (windowDays - 1 - d) * 86400000);
         var dayStr = formatDateObj(date);
         labels.push(formatDateLabel(dayStr));
 
-        var dayOfYear = getDayOfYear(date);
-        var seasonal = 1.0 + 0.12 * Math.sin((dayOfYear - 80) / 365 * 2 * Math.PI);
+        var dayOfYear  = getDayOfYear(date);
+        var seasonal   = 1.0 + 0.12 * Math.sin((dayOfYear - 80) / 365 * 2 * Math.PI);
         var cloudNoise = 1.0 + (seededRandom() - 0.5) * 0.08;
 
         var p50 = dailyP50 * seasonal * cloudNoise;
-        var p75 = dailyP75 * seasonal * (1.0 + (seededRandom() - 0.5) * 0.06);
         var p90 = dailyP90 * seasonal * (1.0 + (seededRandom() - 0.5) * 0.05);
+        var p95 = dailyP95 * seasonal * (1.0 + (seededRandom() - 0.5) * 0.04);
 
-        if (p75 > p50) p75 = p50 * 0.95;
-        if (p90 > p75) p90 = p75 * 0.95;
+        if (p90 > p50) p90 = p50 * 0.976;
+        if (p95 > p90) p95 = p90 * 0.924;
 
         dataP50.push(round(p50, 2));
-        dataP75.push(round(p75, 2));
         dataP90.push(round(p90, 2));
+        dataP95.push(round(p95, 2));
         dataBand.push(round(p50, 2));
 
-        /* Simulate actual with realistic patterns */
         var actualBase = p50 * (0.92 + seededRandom() * 0.16);
-        if (seededRandom() < 0.15) {
-            actualBase *= (0.75 + seededRandom() * 0.15);
-        }
-        /* One "recovery spike" around day 25 */
-        if (d >= 23 && d <= 25) {
-            actualBase = p50 * (1.02 + seededRandom() * 0.05);
-        }
+        if (seededRandom() < 0.15) actualBase *= (0.75 + seededRandom() * 0.15);
+        if (d >= 23 && d <= 25)    actualBase  = p50 * (1.02 + seededRandom() * 0.05);
         dataActual.push(round(Math.max(0, actualBase), 2));
     }
 
-    renderChart(labels, dataP50, dataP75, dataP90, dataBand, dataActual);
-    updateRiskState(dataActual, dataP50, dataP75, s);
-    updateTooltipSummary(dataActual, dataP50, dataP75, dataP90, s);
+    renderChart(labels, dataP50, dataP90, dataP95, dataBand, dataActual);
+    updateRiskState(dataActual, dataP50, dataP90, s);
+    updateTooltipSummary(dataActual, dataP50, dataP90, dataP95, s);
 }
 
 /* ────────── NO DATA STATE ────────── */
@@ -661,7 +744,7 @@ function renderNoData() {
    CHART RENDERING
    ═══════════════════════════════════════════════════ */
 
-function renderChart(labels, p50, p75, p90, band, actual, pvlib) {
+function renderChart(labels, p50, p90, p95, band, actual, pvlib) {
     if (!myChart) return;
 
     var s = self.ctx.settings;
@@ -676,7 +759,7 @@ function renderChart(labels, p50, p75, p90, band, actual, pvlib) {
     myChart.data.datasets[5].data = pvlib || [];            // Physics Expected (pvlib)
 
     // Calculate dynamic y-axis range
-    var allVals = [].concat(p50, p75, p90, actual).filter(function(v) { return v !== null && v !== undefined; });
+    var allVals = [].concat(p50, p90, p95, actual).filter(function(v) { return v !== null && v !== undefined; });
     if (allVals.length > 0) {
         var y1 = Math.min.apply(null, allVals);
         var y2 = Math.max.apply(null, allVals);
@@ -748,8 +831,9 @@ function updateStatusBadge() {
 
     switch (dataMode) {
         case 'live':
+        case 'monthly':
             $statusDot.addClass('good');
-            $statusText.text('LIVE');
+            $statusText.text(dataMode === 'monthly' ? 'MONTHLY' : 'LIVE');
             break;
         case 'derived':
             $statusDot.addClass('derived');
@@ -770,7 +854,7 @@ function updateStatusBadge() {
    DYNAMIC TOOLTIP
    ═══════════════════════════════════════════════════ */
 
-function updateTooltipSummary(actual, p50, p75, p90, s) {
+function updateTooltipSummary(actual, p50, p90, p95, s) {
     cacheDom();
     var unit = s.unitLabel || 'MWh';
     var decimals = parseInt(s.decimals) || 1;

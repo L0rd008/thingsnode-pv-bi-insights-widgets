@@ -1,7 +1,7 @@
 /* ════════════════════════════════════════════════════
    Forecast vs. Actual Energy — V1
    ThingsBoard v4.2.1.1 PE | Latest Values Widget
-   Probabilistic forecast envelope (P50/P75/P90)
+   Probabilistic forecast envelope (P50/P90/P95)
    ════════════════════════════════════════════════════ */
 
 /* ─────────────────────────────
@@ -25,7 +25,7 @@
 
     --c-actual: #06F5FF;
     --c-p50: #448AFF;
-    --c-p75: #FFC107;
+    --c-p95: #FF1744;
     --c-p90: #FF5252;
     --c-band: rgba(68, 138, 255, 0.12);
 
@@ -232,8 +232,8 @@
     border-top-style: dashed;
 }
 
-.legend-swatch.line-p75 {
-    border-top-color: var(--c-p75);
+.legend-swatch.line-p95 {
+    border-top-color: var(--c-p95);
     border-top-style: dashed;
 }
 

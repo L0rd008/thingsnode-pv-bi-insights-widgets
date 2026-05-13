@@ -3,8 +3,15 @@
         "id": "widgetTitle",
         "name": "Widget Title",
         "type": "text",
-        "default": "FORECAST vs. ACTUAL ENERGY (30-DAY MWh)",
+        "default": "FORECAST vs. ACTUAL ENERGY (12-MONTH MWh)",
         "helpText": "Header title for the widget."
+    },
+    {
+        "id": "viewMode",
+        "name": "View Mode",
+        "type": "text",
+        "default": "monthly",
+        "helpText": "'monthly' = full calendar year, 12 monthly bars + P50/P90/P95 lines including future months (recommended). 'daily' = rolling windowDays view with daily granularity."
     },
     {
         "id": "unitLabel",
@@ -14,60 +21,95 @@
         "helpText": "Unit displayed on the Y-axis and in tooltips."
     },
     {
-        "id": "windowDays",
-        "name": "Rolling Window (Days)",
-        "type": "number",
-        "default": 365,
-        "helpText": "Number of past days to display. 365 = full 12-month view (recommended for P-value analysis). Common: 30, 90, 365."
+        "id": "actualEnergyKey",
+        "name": "Actual Energy Key",
+        "type": "text",
+        "default": "active_power",
+        "helpText": "In monthly mode: 'active_power' (kW realtime, summed to monthly MWh). In daily mode: 'total_generation' (daily MWh)."
     },
     {
-        "id": "actualEnergyKey",
-        "name": "Actual Energy Telemetry Key",
+        "id": "forecastP50MonthlyKey",
+        "name": "P50 Monthly Forecast Key",
         "type": "text",
-        "default": "total_generation",
-        "helpText": "Telemetry key for actual daily energy production."
+        "default": "forecast_p50_monthly",
+        "helpText": "Monthly P50 forecast key (MWh). Written by pvalue_job.py. Used in monthly view mode."
+    },
+    {
+        "id": "forecastP90MonthlyKey",
+        "name": "P90 Monthly Forecast Key",
+        "type": "text",
+        "default": "forecast_p90_monthly",
+        "helpText": "Monthly P90 forecast key (MWh). Used in monthly view mode."
+    },
+    {
+        "id": "forecastP95MonthlyKey",
+        "name": "P95 Monthly Forecast Key",
+        "type": "text",
+        "default": "forecast_p95_monthly",
+        "helpText": "Monthly P95 forecast key (MWh). Outer risk band. Used in monthly view mode."
     },
     {
         "id": "forecastP50Key",
-        "name": "P50 Forecast Telemetry Key",
+        "name": "P50 Daily Forecast Key (daily mode)",
         "type": "text",
         "default": "forecast_p50_daily",
-        "helpText": "Telemetry key for daily P50 forecast. Leave default if not yet available."
-    },
-    {
-        "id": "forecastP95Key",
-        "name": "P95 Forecast Telemetry Key",
-        "type": "text",
-        "default": "forecast_p95_daily",
-        "helpText": "Telemetry key for daily P95 forecast (outer risk band). Written by pvalue_job.py."
+        "helpText": "Daily P50 forecast key (MWh). Used in daily view mode only."
     },
     {
         "id": "forecastP90Key",
-        "name": "P90 Forecast Telemetry Key",
+        "name": "P90 Daily Forecast Key (daily mode)",
         "type": "text",
         "default": "forecast_p90_daily",
-        "helpText": "Telemetry key for daily P90 forecast."
+        "helpText": "Daily P90 forecast key (MWh). Used in daily view mode only."
+    },
+    {
+        "id": "forecastP95Key",
+        "name": "P95 Daily Forecast Key (daily mode)",
+        "type": "text",
+        "default": "forecast_p95_daily",
+        "helpText": "Daily P95 forecast key (MWh). Used in daily view mode only."
+    },
+    {
+        "id": "windowDays",
+        "name": "Rolling Window (Days) — daily mode only",
+        "type": "number",
+        "default": 365,
+        "helpText": "Number of past days shown in daily view mode. Ignored in monthly mode."
     },
     {
         "id": "p50AttributeKey",
         "name": "P50 Annual Energy Attribute",
         "type": "text",
         "default": "p50_energy",
-        "helpText": "Server attribute key for annual P50 energy (kWh). Used as fallback to derive daily forecasts."
+        "helpText": "Annual P50 energy (kWh) SERVER_SCOPE attribute — fallback when daily/monthly telemetry is missing."
+    },
+    {
+        "id": "p90AttributeKey",
+        "name": "P90 Annual Energy Attribute",
+        "type": "text",
+        "default": "p90_energy",
+        "helpText": "Annual P90 energy (kWh) SERVER_SCOPE attribute — fallback."
     },
     {
         "id": "p95AttributeKey",
         "name": "P95 Annual Energy Attribute",
         "type": "text",
         "default": "p95_energy",
-        "helpText": "Server attribute key for annual P95 energy (kWh). Used as outer-band fallback in derived mode."
+        "helpText": "Annual P95 energy (kWh) SERVER_SCOPE attribute — fallback."
+    },
+    {
+        "id": "pvlibExpectedKey",
+        "name": "Physics Expected Energy Key (pvlib)",
+        "type": "text",
+        "default": "total_generation_expected_kwh",
+        "helpText": "Daily expected energy (kWh) from pvlib daily rollup. Shown as green dotted line. Leave blank to hide."
     },
     {
         "id": "baseDailyEnergy",
-        "name": "Baseline Daily Energy (kWh)",
+        "name": "Baseline Daily Energy (kWh) — simulation fallback",
         "type": "number",
         "default": 4110,
-        "helpText": "Fallback daily energy baseline in kWh for pure simulation mode (when no attributes or telemetry are available). Divided by 1000 for MWh display."
+        "helpText": "Fallback daily energy kWh used only in pure simulation mode."
     },
     {
         "id": "decimals",
@@ -81,7 +123,7 @@
         "name": "Show Confidence Band",
         "type": "switch",
         "default": true,
-        "helpText": "Toggle the shaded risk bands between P50→P90 (inner) and P50→P95 (outer) on the chart."
+        "helpText": "Toggle the shaded risk band between P50 and P90 on the chart."
     },
     {
         "id": "accentColor",
@@ -96,12 +138,5 @@
         "type": "text",
         "default": "",
         "helpText": "Static tooltip override. Leave blank for auto-generated risk summary."
-    },
-    {
-        "id": "pvlibExpectedKey",
-        "name": "Physics Expected Energy Key (pvlib)",
-        "type": "text",
-        "default": "total_generation_expected_kwh",
-        "helpText": "Daily expected energy written by the pvlib-service daily roll-up job (kWh stored, auto-converted to MWh for display). Shown as a green dotted line alongside the P50 forecast. Leave blank to hide."
     }
 ]

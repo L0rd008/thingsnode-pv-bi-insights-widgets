@@ -1,100 +1,147 @@
-# Forecast vs Actual Energy (V1) - Quick Read and Setup
+# Forecast vs Actual Energy (V1) — Quick Read and Setup
+
+> **v2.0 — Updated 2026-05-13**  
+> P75 has been replaced by **P95** throughout. Window extended to **12 months (365 days)**. Forecast telemetry is now generated automatically by `pvalue_job.py` in Pvlib-Service.
+
+---
 
 ## 0) What this means in a PV plant
-- This widget compares plant **actual daily energy** against probabilistic forecast bands (`P50`, `P75`, `P90`).
-- In PV operations:
-  - `P50` is the median expected outcome.
-  - `P75/P90` are more conservative expectations.
-  - Actual below `P75` usually signals elevated performance risk.
-- Use this card to see short-horizon production risk and forecast quality over a rolling window.
 
-## 1) Runtime modes and triggers
-| Mode | Trigger in code | Main purpose |
+This widget compares plant **actual daily energy** against three probabilistic forecast bands derived from 19 years of ERA5 physics simulation (2005–2023).
+
+| Band | Meaning | Risk interpretation |
 |---|---|---|
-| `live` | Both actual key and `P50` key return enough telemetry points | Real actual vs real forecast comparison |
-| `derived` | Actual exists but forecast telemetry is missing, and annual forecast attributes exist | Build daily forecast bands from annual attributes |
-| `simulated` | Telemetry/attributes are missing | Generate synthetic series so UI still works |
-| `nodata` | No datasource entity | Show empty state |
+| `P50` | Median — 50% of historical years exceeded this | Benchmark / expected case |
+| `P90` | Only 10% of historical years fell *below* this | Conservative / warning threshold |
+| `P95` | Only 5% of historical years fell *below* this | Worst-case / critical threshold |
 
-## 2) Calculations performed
-1. Uses only `datasources[0]` to get entity id/type.
-2. Fetches telemetry directly via API for keys in settings:
-   - `actualEnergyKey` (default `total_generation`)
-   - `forecastP50Key`, `forecastP75Key`, `forecastP90Key`
-3. Groups points by day and **averages values within each day**.
-4. Aligns dates across all series and renders chart lines + optional `P50-P90` confidence band.
-5. Risk state is based on latest non-null actual:
-   - `actual >= P50` -> `ON TRACK`
-   - `P75 <= actual < P50` -> `WARNING`
-   - `actual < P75` -> `CRITICAL`
-6. Tooltip summary computes:
-   - Avg Actual, Avg P50
-   - Deviation `% = (avgActual - avgP50) / avgP50 * 100`
-   - `MAPE` across available points
+Risk state (bottom-right badge):
+- `actual ≥ P50` → **ON TRACK** (green)
+- `P90 ≤ actual < P50` → **WARNING** (amber)
+- `actual < P90` → **CRITICAL** (red, pulsing)
 
-Derived mode specifics:
-- Reads annual attributes (`p50_energy`, `p75_energy`, `p90_energy`) from `SERVER_SCOPE`.
-- Converts annual kWh to daily MWh:
-  - `daily = annual / 365 / 1000`
-- If `p75` or `p90` attribute is missing:
-  - `P75 = P50 * 0.947`
-  - `P90 = P50 * 0.900`
+---
 
-Simulation mode specifics:
-- Uses `baseDailyEnergy` (kWh), converts to MWh, then applies deterministic seasonal/noise patterns.
+## 1) Runtime modes
 
-## 3) Input telemetry and datasource structure
-- Important: this widget does not rely on datasource key order for values.  
-  It uses setting key names and fetches data through API from the **first datasource entity**.
-- Required datasource:
-  - Data source 0: the plant entity (device/asset) that owns telemetry/attributes.
+| Mode | Trigger | What happens |
+|---|---|---|
+| `live` | `forecast_p50_daily` + actual telemetry both present (> 2 points) | Real P50/P90/P95 lines from pvalue_job telemetry |
+| `derived` | Actual exists but daily forecast telemetry missing; annual attributes exist | Flat daily lines derived from `p50_energy`, `p90_energy`, `p95_energy` attributes |
+| `simulated` | No telemetry and no attributes | Seasonal simulation so the chart renders visibly |
+| `nodata` | No datasource entity | Empty state |
 
-Live mode telemetry (recommended):
-- `total_generation` (or your `actualEnergyKey`)
-- `forecast_p50_daily`, `forecast_p75_daily`, `forecast_p90_daily`
+---
 
-Derived mode minimum:
-- Actual telemetry key
-- Server attribute `p50_energy` (annual kWh)
-- Optional `p75_energy`, `p90_energy`
+## 2) Telemetry keys (primary — live mode)
 
-Data quality note:
-- Because per-day values are averaged, provide one daily aggregated point per key per day for best results.
+All written by **`pvalue_job.py`** (Pvlib-Service). Unit: **MWh/day**. Timestamp: local midnight of each calendar day.
 
-## 4) Units (input vs output)
-- Display unit is `unitLabel` (default `MWh`).
-- Live mode does no unit conversion on telemetry.
-- Derived/simulated forecast lines are generated in MWh/day from annual kWh attributes.
-- Keep actual telemetry in the same unit as displayed lines to avoid mismatch.
+| Setting ID | Default key | Written by | Cadence |
+|---|---|---|---|
+| `forecastP50Key` | `forecast_p50_daily` | pvalue_job.py | Annual batch (365 rows/year) |
+| `forecastP90Key` | `forecast_p90_daily` | pvalue_job.py | Annual batch (365 rows/year) |
+| `forecastP95Key` | `forecast_p95_daily` | pvalue_job.py | Annual batch (365 rows/year) |
+| `actualEnergyKey` | `total_generation` | Plant meter / SCADA | Daily |
+| `pvlibExpectedKey` | `total_generation_expected_kwh` | Pvlib-Service daily rollup | Daily (kWh — auto-converted to MWh for display) |
 
-## 5) ThingsBoard setup checklist
-1. Add widget as `Latest values`.
-2. Add one datasource entity (plant/device) as first datasource.
-3. Set settings keys to your telemetry naming.
-4. If forecast telemetry is unavailable, configure annual attributes.
-5. Set `windowDays` and `unitLabel`.
+> **Unit note:** `forecast_p*_daily` keys are in **MWh** and are used directly.  
+> `total_generation_expected_kwh` is in **kWh** and is divided by 1000 for display.
 
-## 6) Example input data
-Telemetry example (daily):
+---
+
+## 3) Attribute keys (derived mode fallback)
+
+If daily forecast telemetry is not yet in TB, the widget falls back to annual `SERVER_SCOPE` attributes to generate a flat daily baseline.
+
+| Setting ID | Default attribute | Unit | Written by |
+|---|---|---|---|
+| `p50AttributeKey` | `p50_energy` | kWh (annual) | pvalue_job.py |
+| `p90AttributeKey` | `p90_energy` | kWh (annual) | pvalue_job.py |
+| `p95AttributeKey` | `p95_energy` | kWh (annual) | pvalue_job.py |
+
+Fallback ratios used when attributes are missing:
+- `P90 = P50 × 0.976`
+- `P95 = P50 × 0.924`
+
+Daily derived formula: `daily_MWh = annual_kWh / 365 / 1000`
+
+---
+
+## 4) ThingsBoard datasource setup
+
+This widget uses **only datasources[0]** for entity identification. It fetches all telemetry via direct REST, not from the TB datasource subscription.
+
+**Minimum setup:**
+1. Widget type: **Latest Values**
+2. Add exactly **one datasource** — the plant asset (type `ASSET`)
+3. The datasource key does not matter (the widget ignores subscription data entirely in live mode)
+
+**Recommended TB datasource config:**
+
+```
+Datasource 0:  Plant Asset  →  key: total_generation   (just to establish the entity)
+```
+
+---
+
+## 5) Settings reference
+
+| Setting | Default | Notes |
+|---|---|---|
+| `widgetTitle` | `FORECAST vs. ACTUAL ENERGY (12-MONTH MWh)` | Header text |
+| `windowDays` | `365` | Rolling window. 365 = full year view |
+| `actualEnergyKey` | `total_generation` | Daily actual energy key (MWh) |
+| `forecastP50Key` | `forecast_p50_daily` | P50 daily forecast key (MWh) |
+| `forecastP90Key` | `forecast_p90_daily` | P90 daily forecast key (MWh) |
+| `forecastP95Key` | `forecast_p95_daily` | P95 daily forecast key (MWh) |
+| `p50AttributeKey` | `p50_energy` | Annual P50 attribute (kWh) for derived fallback |
+| `p90AttributeKey` | `p90_energy` | Annual P90 attribute (kWh) for derived fallback |
+| `p95AttributeKey` | `p95_energy` | Annual P95 attribute (kWh) for derived fallback |
+| `pvlibExpectedKey` | `total_generation_expected_kwh` | Daily physics expected (kWh, green dotted line). Leave blank to hide |
+| `baseDailyEnergy` | `4110` | Fallback kWh/day for simulation mode |
+| `showConfidenceBand` | `true` | Shade between P50 and P95 |
+| `decimals` | `1` | Decimal places in tooltip/axis |
+| `unitLabel` | `MWh` | Display unit label |
+
+---
+
+## 6) Generating the forecast telemetry
+
+Run the one-shot backfill on Pvlib-Service to populate all plants:
+
+```bash
+# Single plant smoke test
+curl -X POST "http://localhost:8004/admin/run-pvalues-plant?asset_id=<ASSET_UUID>"
+
+# Full fleet backfill
+curl -X POST "http://localhost:8004/admin/run-pvalues" --max-time 600
+```
+
+The annual cron runs automatically on **Jan 1 at 03:00 Asia/Colombo** when `PVALUE_JOB_ENABLED=true` in `.env`.
+
+---
+
+## 7) Example telemetry payload
+
+Daily timeseries written to TB (one row per day, unit: MWh):
 
 ```json
 {
-  "ts": 1773974400000,
-  "values": {
-    "total_generation": 4.62,
-    "forecast_p50_daily": 4.80,
-    "forecast_p75_daily": 4.55,
-    "forecast_p90_daily": 4.31
-  }
+  "forecast_p50_daily": 61.78,
+  "forecast_p90_daily": 60.30,
+  "forecast_p95_daily": 57.13
 }
 ```
 
-Attribute example (annual, kWh):
+Annual SERVER_SCOPE attributes:
 
 ```json
 {
-  "p50_energy": 1750000,
-  "p75_energy": 1657250,
-  "p90_energy": 1575000
+  "p50_energy": 22552363.8,
+  "p90_energy": 22009095.4,
+  "p95_energy": 20852304.9,
+  "pvalue_model_version": "pvalue-monthly-v1",
+  "pvalue_updated_at": "2026-05-12T10:43:39Z"
 }
 ```
