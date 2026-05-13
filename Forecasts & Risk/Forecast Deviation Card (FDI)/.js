@@ -133,6 +133,256 @@ function fetchMtdData() {
         var entTypeStr = (typeof entityType === 'string')  ? entityType          : entityId.entityType;
         if (!entIdStr) { showPlaceholder(); return; }
 
+        /* Month-start in Asia/Colombo (UTC+5:30 = +330 min) */
+        var offsetMs = 330 * 60 * 1000;
+        var nowUtcMs  = Date.now();
+        var nowLocal  = new Date(nowUtcMs + offsetMs);
+        var monthStartLocal = new Date(
+            Date.UTC(nowLocal.getUTCFullYear(), nowLocal.getUTCMonth(), 1)
+        );
+        var monthStartMs = monthStartLocal.getTime() - offsetMs;
+        var endTs = nowUtcMs;
+
+        /* Generic: use forecastDailyKey (P50/P90/P95 per instance) */
+        var fcKey       = s.forecastDailyKey     || s.forecastP50DailyKey || 'forecast_p50_daily';
+        var actKey      = s.actualEnergyKey      || 'active_power';
+        var actDailyKey = s.actualDailyEnergyKey || 'actual_daily_energy_kwh';
+
+        /* Request 1: P-value daily rows for the month (agg=NONE, max 31 rows) */
+        var fcUrl = '/api/plugins/telemetry/' + entTypeStr + '/' + entIdStr +
+            '/values/timeseries?keys=' + fcKey +
+            '&startTs=' + monthStartMs + '&endTs=' + endTs +
+            '&limit=35&agg=NONE&orderBy=ASC';
+
+        /* Today start in Asia/Colombo */
+        var todayLocal      = new Date(nowUtcMs + offsetMs);
+        var todayStartLocal = new Date(Date.UTC(
+            todayLocal.getUTCFullYear(), todayLocal.getUTCMonth(), todayLocal.getUTCDate()
+        ));
+        var todayStartMs = todayStartLocal.getTime() - offsetMs;
+
+        /* Request 2a: past days (actual_daily_energy_kwh, kWh, 1 row/day) */
+        var actPastUrl = '/api/plugins/telemetry/' + entTypeStr + '/' + entIdStr +
+            '/values/timeseries?keys=' + actDailyKey +
+            '&startTs=' + monthStartMs + '&endTs=' + todayStartMs +
+            '&limit=35&agg=NONE&orderBy=ASC';
+
+        /* Request 2b: today partial only (active_power agg=SUM, today-window only, max ~960 readings) */
+        var todayMs     = Math.max(endTs - todayStartMs, 60000);
+        var actTodayUrl = '/api/plugins/telemetry/' + entTypeStr + '/' + entIdStr +
+            '/values/timeseries?keys=' + actKey +
+            '&startTs=' + todayStartMs + '&endTs=' + endTs +
+            '&limit=1&agg=SUM&interval=' + todayMs;
+
+        self.ctx.http.get(fcUrl).subscribe(
+            function (fcData) {
+                var fcRows = fcData[fcKey] || [];
+                if (fcRows.length === 0) { showPlaceholder(); return; }
+
+                var sumFcKwh = 0;
+                for (var i = 0; i < fcRows.length; i++) {
+                    var v = parseFloat(fcRows[i].value);
+                    if (!isNaN(v) && v > 0) sumFcKwh += v * 1000;
+                }
+                if (sumFcKwh <= 0) { showPlaceholder(); return; }
+
+                var unit = s.unitLabel || 'MWh';
+                var displayForecast = unit === 'MWh' ? sumFcKwh / 1000 : sumFcKwh;
+
+                self.ctx.http.get(actPastUrl).subscribe(function (pastData) {
+                    var pastRows   = (pastData && pastData[actDailyKey]) ? pastData[actDailyKey] : [];
+                    var sumPastKwh = 0;
+                    for (var j = 0; j < pastRows.length; j++) {
+                        var a = parseFloat(pastRows[j].value);
+                        if (!isNaN(a) && a > 0) sumPastKwh += a;
+                    }
+
+                    self.ctx.http.get(actTodayUrl).subscribe(
+                        function (todayData) {
+                            var tRows    = (todayData && todayData[actKey]) ? todayData[actKey] : [];
+                            var todayKwh = tRows.length > 0 ? parseFloat(tRows[0].value) / 60.0 : 0;
+                            if (isNaN(todayKwh) || todayKwh < 0) todayKwh = 0;
+
+                            var sumActKwh     = sumPastKwh + todayKwh;
+                            var displayActual = unit === 'MWh' ? sumActKwh / 1000 : sumActKwh;
+
+                            if (sumActKwh <= 0) {
+                                applyDeviation(0, 0, displayForecast, 'mtd');
+                            } else {
+                                var fdiPct = ((sumActKwh - sumFcKwh) / sumFcKwh) * 100;
+                                applyDeviation(fdiPct, displayActual, displayForecast, 'mtd');
+                            }
+                        },
+                        function () {
+                            var displayActual = unit === 'MWh' ? sumPastKwh / 1000 : sumPastKwh;
+                            if (sumPastKwh <= 0) {
+                                applyDeviation(0, 0, displayForecast, 'mtd');
+                            } else {
+                                applyDeviation(((sumPastKwh - sumFcKwh) / sumFcKwh) * 100, displayActual, displayForecast, 'mtd');
+                            }
+                        }
+                    );
+
+                }, function () {
+                    var mtdMs    = Math.max(endTs - monthStartMs, 60000);
+                    var actFbUrl = '/api/plugins/telemetry/' + entTypeStr + '/' + entIdStr +
+                        '/values/timeseries?keys=' + actKey +
+                        '&startTs=' + monthStartMs + '&endTs=' + endTs +
+                        '&limit=1&agg=SUM&interval=' + mtdMs;
+                    self.ctx.http.get(actFbUrl).subscribe(
+                        function (fbData) {
+                            var fbRows    = (fbData && fbData[actKey]) ? fbData[actKey] : [];
+                            var sumActKwh = fbRows.length > 0 ? parseFloat(fbRows[0].value) / 60.0 : 0;
+                            var displayActual = unit === 'MWh' ? sumActKwh / 1000 : sumActKwh;
+                            if (sumActKwh <= 0) {
+                                applyDeviation(0, 0, displayForecast, 'mtd');
+                            } else {
+                                applyDeviation(((sumActKwh - sumFcKwh) / sumFcKwh) * 100, displayActual, displayForecast, 'mtd');
+                            }
+                        },
+                        function () { applyDeviation(0, 0, displayForecast, 'mtd'); }
+                    );
+                });
+            },
+            function () { showPlaceholder(); }
+        );
+    } catch (e) { showPlaceholder(); }
+}
+//═══════════════
+// Forecast Deviation Card (FDI) — v2.2
+// ThingsBoard v4.3.0 PE | Latest Values
+// 3-tier: Live → Derived → Manual Simulation
+// Compact horizontal layout — no gauge
+// ════════════════════════════════════════════════════
+
+var $el, s;
+var $card, $title, $resolution;
+var $statusDot, $statusText;
+var $value;
+var $ctxForecast, $ctxActual;
+var $footerText;
+var $tooltip;
+
+// ──────────────────────────────────────────────────
+//  Lifecycle: Init — DOM caching
+// ──────────────────────────────────────────────────
+self.onInit = function () {
+    s = self.ctx.settings || {};
+    $el = self.ctx.$container;
+    self.ctx.$widget = $el;
+
+    // ── Cache all DOM selections ──
+    $card = $el.find('.fdi-card');
+    $title = $el.find('.js-title');
+    $resolution = $el.find('.js-resolution');
+    $statusDot = $el.find('.js-status-dot');
+    $statusText = $el.find('.js-status-text');
+    $value = $el.find('.js-value');
+    $ctxForecast = $el.find('.js-ctx-forecast');
+    $ctxActual = $el.find('.js-ctx-actual');
+    $footerText = $el.find('.js-footer-text');
+    $tooltip = $el.find('.js-tooltip');
+
+    // ── Apply accent color override ──
+    if (s.accentColor) {
+        $card.css({
+            '--c-accent': s.accentColor,
+            '--c-accent-border': s.accentColor + '66',
+            '--c-accent-hover': s.accentColor + 'CC',
+            '--c-accent-glow': s.accentColor + '1F',
+            '--c-accent-glow-hover': s.accentColor + '40'
+        });
+    }
+
+    updateDom();
+    self.onResize();
+    self.onDataUpdated();
+};
+
+// ──────────────────────────────────────────────────
+//  DOM setup — titles, labels
+// ──────────────────────────────────────────────────
+function updateDom() {
+    $title.text(s.cardTitle || 'FDI vs P50 (%)');
+    $footerText.text(s.footerText || 'Deviation from Median Expectation');
+    $resolution.text((s.resolution || 'Plant').toUpperCase());
+
+    if (s.tooltipText) {
+        $tooltip.text(s.tooltipText);
+    }
+}
+
+// ──────────────────────────────────────────────────
+//  Data handler — 3-tier pipeline
+// ──────────────────────────────────────────────────
+self.onDataUpdated = function () {
+    // ── Tier 0: Manual override ──
+    if (s.enableManualOverride) {
+        var manualVal = parseFloat(s.manualDeviation);
+        if (isNaN(manualVal)) manualVal = 0;
+        applyDeviation(manualVal, null, null, 'simulated');
+        return;
+    }
+
+    // ── MTD mode: fetch daily P50 + actual timeseries for current month ──
+    var fdiMode = (s.fdiMode || 'mtd').toLowerCase();
+    if (fdiMode === 'mtd') {
+        fetchMtdData();
+        return;
+    }
+
+    // ── Guard: no data at all ──
+    if (!self.ctx.data || self.ctx.data.length === 0 ||
+        !self.ctx.data[0].data || self.ctx.data[0].data.length === 0) {
+        showPlaceholder();
+        return;
+    }
+
+    // DS[0] = first key
+    var ds0Raw = self.ctx.data[0].data[0][1];
+    if (ds0Raw === null || ds0Raw === undefined || isNaN(parseFloat(ds0Raw))) {
+        showPlaceholder();
+        return;
+    }
+    var ds0Val = parseFloat(ds0Raw);
+
+    // ── Tier 1: LIVE mode — both DS[0] and DS[1] available ──
+    if (self.ctx.data.length > 1 &&
+        self.ctx.data[1].data && self.ctx.data[1].data.length > 0) {
+
+        var ds1Raw = self.ctx.data[1].data[0][1];
+        if (ds1Raw !== null && ds1Raw !== undefined && !isNaN(parseFloat(ds1Raw))) {
+            var ds1Val = parseFloat(ds1Raw);
+            var forecastVal = ds0Val;
+            var actualVal = ds1Val;
+
+            if (forecastVal > 0) {
+                var fdiPct = ((actualVal - forecastVal) / forecastVal) * 100;
+                applyDeviation(fdiPct, actualVal, forecastVal, 'live');
+                return;
+            }
+        }
+    }
+
+    // ── Tier 2: DERIVED mode — DS[0] = actual, use attribute for P50 ──
+    tryAttributeDerived(ds0Val, s);
+};
+
+// ──────────────────────────────────────────────────
+//  MTD mode: fetch daily timeseries for current month
+// ──────────────────────────────────────────────────
+function fetchMtdData() {
+    try {
+        if (!self.ctx.datasources || self.ctx.datasources.length === 0) {
+            showPlaceholder(); return;
+        }
+        var ds = self.ctx.datasources[0];
+        var entityId   = ds.entityId;
+        var entityType = ds.entityType;
+        var entIdStr   = (typeof entityId   === 'object') ? entityId.id         : entityId;
+        var entTypeStr = (typeof entityType === 'string')  ? entityType          : entityId.entityType;
+        if (!entIdStr) { showPlaceholder(); return; }
+
         /* Compute month-start in Asia/Colombo (UTC+5:30 = +330 min).
            Browser clock may be in a different timezone — apply explicit offset so
            monthStart aligns with the plant's local midnight (where pvalue_job stamps rows). */
@@ -147,51 +397,63 @@ function fetchMtdData() {
 
         /* Generic: use forecastDailyKey setting (can be P50, P90, or P95 key per instance) */
         var fcKey  = s.forecastDailyKey  || s.forecastP50DailyKey || 'forecast_p50_daily';
-        var actKey = s.actualDailyKey    || 'total_generation';
+        var actKey = s.actualEnergyKey   || 'active_power';
 
-        var url = '/api/plugins/telemetry/' + entTypeStr + '/' + entIdStr +
-            '/values/timeseries?keys=' + fcKey + ',' + actKey +
+        /* Request 1: P-value daily rows for the month (agg=NONE, max 31 rows) */
+        var fcUrl = '/api/plugins/telemetry/' + entTypeStr + '/' + entIdStr +
+            '/values/timeseries?keys=' + fcKey +
             '&startTs=' + monthStartMs + '&endTs=' + endTs +
-            '&limit=100&agg=NONE&orderBy=ASC';
+            '&limit=35&agg=NONE&orderBy=ASC';
 
-        self.ctx.http.get(url).subscribe(
-            function (data) {
-                var fcRows  = data[fcKey]  || [];
-                var actRows = data[actKey] || [];
+        /* Request 2: actual generation MTD (agg=SUM over full MTD period = 1 row).
+           active_power in kW at ~1-min cadence.
+           TB SUM = sum of all kW readings since month start.
+           Conversion: sum / 60 = kWh ; / 1000 = MWh. */
+        var mtdInterval = Math.max(endTs - monthStartMs, 60000);  // at least 1 min
+        var actUrl = '/api/plugins/telemetry/' + entTypeStr + '/' + entIdStr +
+            '/values/timeseries?keys=' + actKey +
+            '&startTs=' + monthStartMs + '&endTs=' + endTs +
+            '&limit=1&agg=SUM&interval=' + mtdInterval;
+
+        self.ctx.http.get(fcUrl).subscribe(
+            function (fcData) {
+                var fcRows = fcData[fcKey] || [];
 
                 if (fcRows.length === 0) {
-                    /* No forecast rows — fallback to attribute derived mode */
-                    showPlaceholder();
-                    return;
+                    showPlaceholder(); return;
                 }
 
-                /* Sum forecast (MWh) → convert to kWh for same unit as actual */
+                /* Sum forecast rows (MWh) → kWh */
                 var sumFcKwh = 0;
                 for (var i = 0; i < fcRows.length; i++) {
                     var v = parseFloat(fcRows[i].value);
-                    if (!isNaN(v)) sumFcKwh += v * 1000;  // MWh → kWh
+                    if (!isNaN(v) && v > 0) sumFcKwh += v * 1000;
                 }
-
-                /* Sum actual (kWh) */
-                var sumActKwh = 0;
-                for (var j = 0; j < actRows.length; j++) {
-                    var a = parseFloat(actRows[j].value);
-                    if (!isNaN(a)) sumActKwh += a;
-                }
-
                 if (sumFcKwh <= 0) { showPlaceholder(); return; }
 
                 var unit = s.unitLabel || 'MWh';
                 var displayForecast = unit === 'MWh' ? sumFcKwh / 1000 : sumFcKwh;
-                var displayActual   = unit === 'MWh' ? sumActKwh / 1000 : sumActKwh;
 
-                if (actRows.length === 0) {
-                    /* Day 1 or no actual yet — show forecast context, FDI = 0% */
-                    applyDeviation(0, 0, displayForecast, 'mtd');
-                } else {
-                    var fdiPct = ((sumActKwh - sumFcKwh) / sumFcKwh) * 100;
-                    applyDeviation(fdiPct, displayActual, displayForecast, 'mtd');
-                }
+                /* Fetch actual (active_power SUM) */
+                self.ctx.http.get(actUrl).subscribe(
+                    function (actData) {
+                        var actRows = actData[actKey] || [];
+                        if (actRows.length === 0) {
+                            /* No meter data yet (day 1 or night) — FDI = 0%, show forecast */
+                            applyDeviation(0, 0, displayForecast, 'mtd');
+                            return;
+                        }
+                        /* actRows[0].value = sum(kW over MTD) → /60 = kWh → /1000 = MWh */
+                        var sumActKwh = parseFloat(actRows[0].value) / 60.0;
+                        var displayActual = unit === 'MWh' ? sumActKwh / 1000 : sumActKwh;
+                        var fdiPct = ((sumActKwh - sumFcKwh) / sumFcKwh) * 100;
+                        applyDeviation(fdiPct, displayActual, displayForecast, 'mtd');
+                    },
+                    function () {
+                        /* Actual fetch failed — show forecast, FDI = 0% */
+                        applyDeviation(0, 0, displayForecast, 'mtd');
+                    }
+                );
             },
             function () { showPlaceholder(); }
         );

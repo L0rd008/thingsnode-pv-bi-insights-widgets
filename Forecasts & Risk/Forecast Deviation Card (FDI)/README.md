@@ -1,13 +1,15 @@
 # Forecast Deviation Card (FDI) — Quick Read and Setup
 
-> **v3.0 — Updated 2026-05-13**  
-> Added **MTD (month-to-date) mode** — the recommended default. FDI is now computed by summing actual daily energy vs cumulative daily P50 from the 1st of the current month to today.
+> **v4.0 — Updated 2026-05-13**  
+> **3-instance dashboard pattern**: configure separate P50, P90, and P95 instances via `forecastDailyKey` setting.  
+> **actualDailyKey** corrected to `total_generation` (real meter). **Timezone fix**: month-start computed in Asia/Colombo so day-1 data is always found.  
+> **Day-1 grace state**: shows expected forecast with FDI=0% instead of blank placeholder when no actual data yet exists.
 
 ---
 
 ## 0) What this means in a PV plant
 
-FDI (Forecast Deviation Index) measures how far actual generation is from the P50 median forecast:
+FDI (Forecast Deviation Index) measures how far actual generation is from a P-value forecast:
 
 ```
 FDI (%) = (Actual − Forecast) / Forecast × 100
@@ -15,51 +17,70 @@ FDI (%) = (Actual − Forecast) / Forecast × 100
 
 | FDI | Meaning |
 |---|---|
-| Positive | Plant is outperforming median expectation |
+| Positive | Plant is outperforming forecast |
 | Near zero | On track |
 | Negative (> −5%) | Minor deviation — monitor |
 | Negative (< −10%) | Critical — investigate curtailment, soiling, fault |
 
 ---
 
-## 1) Runtime modes
+## 1) 3-Instance Dashboard Pattern
+
+Use **three copies** of this widget on the same dashboard, each configured for a different P-value:
+
+| Instance | `cardTitle` | `forecastDailyKey` | `footerText` |
+|---|---|---|---|
+| FDI vs P50 | `FDI vs P50 (%)` | `forecast_p50_daily` | `Deviation from Median Expectation` |
+| FDI vs P90 | `FDI vs P90 (%)` | `forecast_p90_daily` | `Deviation from P90 Exceedance` |
+| FDI vs P95 | `FDI vs P95 (%)` | `forecast_p95_daily` | `Deviation from P95 Exceedance` |
+
+P50 = median year. P90 = only 10% of historical years were worse. P95 = only 5% were worse.  
+A plant **below P95** is in extreme underperformance — investigate immediately.
+
+---
+
+## 2) Runtime modes
 
 | Mode | `fdiMode` setting | Trigger | What it computes |
 |---|---|---|---|
-| `mtd` | `"mtd"` (**default**) | Always runs first when `fdiMode=mtd` | Fetches daily `forecast_p50_daily` + `actual` from month-start to today, sums both, computes cumulative FDI% |
+| `mtd` | `"mtd"` (**default**) | Always runs first | Fetches `forecastDailyKey` + `actualDailyKey` from month-start to now, sums both, computes cumulative FDI% |
 | `live` | `"live"` | `DS[0]` and `DS[1]` both valid | Single latest-value ratio: `DS[0]=forecast`, `DS[1]=actual` |
-| `derived` | `"derived"` | `DS[0]` valid + `p50_energy` attribute exists | `DS[0]=actual`, P50 derived from annual attribute (`p50Annual / 365 / 1000`) |
+| `derived` | `"derived"` | `DS[0]` valid + `p50_energy` attribute exists | `DS[0]=actual`, P50 derived from annual attribute |
 | `manual` | any | `enableManualOverride=true` | Uses `manualDeviation` value, ignores all data |
 
 ---
 
-## 2) MTD mode — how it works
+## 3) MTD mode — how it works
 
-MTD is the recommended mode for an always-current month-to-date picture:
+MTD gives an always-current month-to-date picture:
 
 ```
-Month-to-date FDI% = (Σ actual_kwh[day 1 → today]  −  Σ p50_kwh[day 1 → today])
-                     / Σ p50_kwh[day 1 → today] × 100
+Month-to-date FDI% = (Σ actual_kwh[day 1 → today]  −  Σ forecast_kwh[day 1 → today])
+                     / Σ forecast_kwh[day 1 → today] × 100
 ```
 
 The widget fetches via REST:
-- `forecast_p50_daily` (MWh → converted ×1000 to kWh internally)
-- `actualDailyKey` (kWh, default `total_generation_expected_kwh`)
+- `forecastDailyKey` (MWh → converted ×1000 to kWh internally)
+- `actualDailyKey` (kWh, default `total_generation` — **real meter**)
 
-from `startTs = 1st of current month 00:00 local` to `now`.
+from `startTs = 1st of current month 00:00 Asia/Colombo` to `now`.
 
-> If `forecast_p50_daily` has no data yet (pvalue_job not run), falls back to `showPlaceholder()`.
+**Timezone**: month-start is computed using UTC+5:30 offset explicitly, so the pvalue_job's midnight-stamped rows are always found regardless of browser timezone.
+
+**Day-1 grace state**: if `actRows.length === 0` (no meter data yet today), displays FDI=0% with forecast context rather than a blank placeholder.
+
+> If `forecastDailyKey` has no data (pvalue_job not run yet), falls back to `showPlaceholder()`.
 
 ---
 
-## 3) Telemetry keys
+## 4) Telemetry keys
 
-All P50 daily forecast telemetry is written by **`pvalue_job.py`** in Pvlib-Service.
+All P-value daily forecast telemetry is written by **`pvalue_job.py`** (pvalue-daily-v2 algorithm).
 
 | Setting ID | Default key | Source | Unit |
 |---|---|---|---|
-| `forecastP50DailyKey` | `forecast_p50_daily` | pvalue_job.py | MWh/day |
-| `actualDailyKey` | `total_generation_expected_kwh` | Pvlib-Service daily rollup | kWh/day |
+| `forecastDailyKey` | `forecast_p50_daily` | pvalue_job.py | MWh/day |
+| `actualDailyKey` | `total_generation` | Real meter | kWh/day |
 | `forecastKey` *(live mode only)* | `forecast_p50_daily` | DS[0] subscription | MWh |
 | `actualKey` *(live mode only)* | `total_generation` | DS[1] subscription | MWh |
 | `p50AttributeKey` *(derived mode only)* | `p50_energy` | pvalue_job.py SERVER_SCOPE | kWh (annual) |
@@ -68,30 +89,31 @@ All P50 daily forecast telemetry is written by **`pvalue_job.py`** in Pvlib-Serv
 
 ---
 
-## 4) ThingsBoard datasource setup
+## 5) ThingsBoard datasource setup
 
 **MTD mode (recommended):**
 1. Widget type: **Latest Values**
 2. Add one datasource: the plant asset
-3. The datasource key is irrelevant — just establishes entity ID
+3. The datasource key is irrelevant — it just establishes the entity ID
 4. Set `fdiMode = "mtd"` in widget settings (this is the default)
 
 **Live mode (point-in-time):**
 1. Add two datasources to the same entity:
-   - DS[0]: `forecast_p50_daily`
-   - DS[1]: `total_generation` (actual)
+   - DS[0]: `forecast_p50_daily` (or p90/p95 key)
+   - DS[1]: `total_generation` (actual meter)
 2. Set `fdiMode = "live"`
 
 ---
 
-## 5) Settings reference
+## 6) Settings reference
 
 | Setting | Default | Notes |
 |---|---|---|
-| `cardTitle` | `FDI vs P50 (%)` | Header text |
+| `cardTitle` | `FDI vs P50 (%)` | Header text — change per instance |
 | `fdiMode` | `"mtd"` | `"mtd"` / `"live"` / `"derived"` |
-| `forecastP50DailyKey` | `forecast_p50_daily` | Daily P50 key for MTD sum (MWh) |
-| `actualDailyKey` | `total_generation_expected_kwh` | Daily actual key for MTD sum (kWh) |
+| `forecastDailyKey` | `forecast_p50_daily` | **Primary**: set to P50/P90/P95 key per instance |
+| `forecastP50DailyKey` | `forecast_p50_daily` | Legacy fallback if `forecastDailyKey` not set |
+| `actualDailyKey` | `total_generation` | **Real meter** daily energy (kWh). NOT pvlib expected. |
 | `forecastKey` | `forecast_p50_daily` | Forecast key for live mode DS[0] |
 | `actualKey` | `total_generation` | Actual key for live mode DS[1] |
 | `p50AttributeKey` | `p50_energy` | Annual P50 attribute for derived mode |
@@ -99,42 +121,52 @@ All P50 daily forecast telemetry is written by **`pvalue_job.py`** in Pvlib-Serv
 | `criticalThreshold` | `-10` | Critical deviation threshold (%) |
 | `unitLabel` | `MWh` | Unit shown in context values |
 | `decimals` | `1` | Decimal places |
-| `footerText` | `Deviation from Median Expectation` | Footer label |
+| `footerText` | `Deviation from Median Expectation` | Footer label — change per instance |
 | `enableManualOverride` | `false` | Override with fixed `manualDeviation` % |
-| `invertLogic` | `false` | Flip green/red (for revenue, where positive deviation is bad) |
+| `invertLogic` | `false` | Flip green/red (for revenue contexts) |
 
 ---
 
-## 6) Generating the P50 daily telemetry
+## 7) Generating the P-value daily telemetry
 
-The `forecast_p50_daily` key must exist in TB before MTD mode shows live data.
+The `forecast_p*_daily` keys are written by `pvalue_job.py` (pvalue-daily-v2). Run once per plant:
 
 ```bash
-# Run pvalue_job for a single plant (smoke test)
+# Smoke test — single plant
 curl -X POST "http://localhost:8004/admin/run-pvalues-plant?asset_id=<ASSET_UUID>"
 
 # Full fleet
 curl -X POST "http://localhost:8004/admin/run-pvalues" --max-time 600
 ```
 
-Confirm data exists in TB:
-- Navigate to the plant asset → **Latest Telemetry**
-- Look for `forecast_p50_daily` with 365 rows timestamped at midnight for each day of the current year
+Confirm data in TB:
+- Navigate to plant asset → **Latest Telemetry**
+- Look for `forecast_p50_daily`, `forecast_p90_daily`, `forecast_p95_daily`
+- 365 rows timestamped at midnight Asia/Colombo for each day of the current year
+- Each day has a **unique** value (not flat within month — pvalue-daily-v2)
 
 ---
 
-## 7) Example telemetry
+## 8) Example
 
 ```json
 {
   "forecast_p50_daily": 61.78,
-  "total_generation_expected_kwh": 58420
+  "forecast_p90_daily": 60.28,
+  "forecast_p95_daily": 57.11,
+  "total_generation": 58420
 }
 ```
 
-MTD calculation (e.g. day 12 of month, 11 days complete):
+MTD calculation (day 12 of month, 11 days complete):
 ```
-Σ P50 = 11 × 61.78 MWh = 679.6 MWh = 679,580 kWh
-Σ Actual = 658,200 kWh
-FDI_MTD = (658200 − 679580) / 679580 × 100 = −3.1%  →  ON TRACK (within −5% threshold)
+P50 instance:  Σ P50 = 11 × 61.78 MWh = 679.6 MWh = 679,580 kWh
+               Σ Actual = 658,200 kWh
+               FDI_P50 = (658200 − 679580) / 679580 × 100 = −3.1%  →  ON TRACK
+
+P90 instance:  Σ P90 = 11 × 60.28 = 663.1 MWh = 663,080 kWh
+               FDI_P90 = (658200 − 663080) / 663080 × 100 = −0.7%  →  ABOVE P90 ✓
+
+P95 instance:  Σ P95 = 11 × 57.11 = 628.2 MWh = 628,210 kWh
+               FDI_P95 = (658200 − 628210) / 628210 × 100 = +4.8%  →  WELL ABOVE P95 ✓
 ```

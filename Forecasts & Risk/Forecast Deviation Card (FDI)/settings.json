@@ -21,11 +21,11 @@
         "helpText": "The P-value key this instance compares against. Set to 'forecast_p50_daily', 'forecast_p90_daily', or 'forecast_p95_daily' to create 3 separate dashboard instances."
     },
     {
-        "id": "actualDailyKey",
-        "name": "Actual Daily Energy Key",
+        "id": "actualEnergyKey",
+        "name": "Actual Power/Energy Key",
         "type": "text",
-        "default": "total_generation",
-        "helpText": "Real meter daily energy key (kWh). Used in MTD mode to sum month-to-date actual generation. Must be actual meter data, NOT pvlib expected."
+        "default": "active_power",
+        "helpText": "Realtime kW key (e.g. 'active_power'). Widget fetches MTD sum via agg=SUM → divides by 60 → MWh. No total_generation key needed."
     },
     {
         "id": "footerText",
