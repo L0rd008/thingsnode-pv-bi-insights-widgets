@@ -22,10 +22,17 @@
     },
     {
         "id": "actualEnergyKey",
-        "name": "Actual Energy Key",
+        "name": "Actual Energy Key (Realtime)",
         "type": "text",
         "default": "active_power",
-        "helpText": "In monthly mode: 'active_power' (kW realtime, summed to monthly MWh). In daily mode: 'total_generation' (daily MWh)."
+        "helpText": "Realtime kW key used for today's partial generation (agg=SUM today-window). Also used as fallback for the full year if actualDailyEnergyKey is missing."
+    },
+    {
+        "id": "actualDailyEnergyKey",
+        "name": "Actual Daily Energy Key (Pre-computed)",
+        "type": "text",
+        "default": "actual_daily_energy_kwh",
+        "helpText": "Pre-computed daily kWh key written by daily_job.py at midnight. Primary source for past days. If missing (plant not yet backfilled), widget falls back to actualEnergyKey agg=SUM."
     },
     {
         "id": "forecastP50MonthlyKey",

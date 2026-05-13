@@ -348,12 +348,15 @@ function fetchLiveData() {
 
 /* ────────── MONTHLY FETCH ────────── */
 function fetchMonthlyData(entIdStr, entTypeStr, s) {
-    /* Window: Jan 1 of current year → Dec 31 of current year (full calendar year)
-       Shows past months (actual+P), current month (partial actual+P), future months (P only). */
+    /* Window: 1 day before Jan 1 → 1 day after Dec 31 of current year.
+       WHY: Monthly P-value records are written at local midnight (Asia/Colombo = UTC-5:30).
+       Jan 1 00:00 Colombo = Dec 31 18:30 UTC. If the browser startTs is Jan 1 local midnight,
+       it would be the same UTC instant → TB boundary collision → January excluded.
+       Adding a 1-day pad on both sides guarantees all 12 monthly records are captured. */
     var now   = new Date();
     var year  = now.getFullYear();
-    var startTs = new Date(year, 0, 1, 0, 0, 0).getTime();   // Jan 1 local
-    var endTs   = new Date(year, 11, 31, 23, 59, 59).getTime(); // Dec 31 local
+    var startTs = new Date(year - 1, 11, 31, 0, 0, 0).getTime();  // Dec 31 prior year local
+    var endTs   = new Date(year + 1,  0,  1, 0, 0, 0).getTime();  // Jan 1 next year local
 
     var p50MKey = s.forecastP50MonthlyKey || 'forecast_p50_monthly';
     var p90MKey = s.forecastP90MonthlyKey || 'forecast_p90_monthly';
@@ -445,15 +448,17 @@ function processMonthlyData(pData, aDailyData, aTodayData, actDailyKey, actKey,
     var unit        = s.unitLabel || 'MWh';
     var MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
-    /* Parse P-value monthly rows → map by month index (0-11) */
+    /* Parse P-value monthly rows → map by month index (0-11), filtered to target year */
     function pRowsToMonthMap(rows) {
         var map = {};
         (rows || []).forEach(function (r) {
             var d = new Date(parseInt(r.ts));
+            if (d.getFullYear() !== year) return;  // exclude Dec-31 prior or Jan-1 next
             map[d.getMonth()] = parseFloat(r.value);
         });
         return map;
     }
+
     var p50Map  = pRowsToMonthMap(pData[p50MKey]);
     var p90Map  = pRowsToMonthMap(pData[p90MKey]);
     var p95Map  = pRowsToMonthMap(pData[p95MKey]);
