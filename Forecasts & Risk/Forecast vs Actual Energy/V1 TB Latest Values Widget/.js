@@ -366,26 +366,68 @@ function fetchMonthlyData(entIdStr, entTypeStr, s) {
         '&startTs=' + startTs + '&endTs=' + endTs +
         '&limit=100&agg=NONE';
 
-    /* Fetch actual monthly sums via agg=SUM on active_power (kW → MWh via /60/1000 per min)
-       Use total_generation_expected_kwh daily sums as fallback for plants without active_power. */
-    var actKey   = s.actualEnergyKey || 'active_power';
-    var actFbKey = s.pvlibExpectedKey || 'total_generation_expected_kwh';
-    /* Interval = 30 days in ms; TB will bucket by this window. We'll re-bucket client-side by month. */
-    var aActUrl = '/api/plugins/telemetry/' + entTypeStr + '/' + entIdStr +
+    /* Strategy: Hybrid actual fetch.
+       1. Read actual_daily_energy_kwh (pre-computed by daily_job.py, 1 row/day).
+          ~365 tiny rows for the year — fast, no scan cost.
+       2. For today: actual_daily_energy_kwh not yet written (daily_job runs at midnight).
+          Append today's partial via active_power agg=SUM over today-only window.
+          At most ~960 readings (16h × 60min) — trivially fast.
+       3. Fallback: if actual_daily_energy_kwh has no data (plant not yet backfilled),
+          use active_power agg=SUM daily buckets for the whole year (degraded mode).
+    */
+    var actKey      = s.actualEnergyKey      || 'active_power';
+    var actDailyKey = s.actualDailyEnergyKey || 'actual_daily_energy_kwh';
+    var DAY_MS      = 86400000;
+    var nowMs       = Date.now();
+
+    /* Today's start in Asia/Colombo (UTC+5:30) */
+    var offsetMs        = 330 * 60 * 1000;
+    var nowLocal        = new Date(nowMs + offsetMs);
+    var todayStartLocal = new Date(Date.UTC(nowLocal.getUTCFullYear(), nowLocal.getUTCMonth(), nowLocal.getUTCDate()));
+    var todayStartMs    = todayStartLocal.getTime() - offsetMs;   // true UTC ms for Colombo 00:00 today
+
+    /* Request 1: pre-computed daily actual (Jan 1 → yesterday midnight) */
+    var aDailyUrl = '/api/plugins/telemetry/' + entTypeStr + '/' + entIdStr +
+        '/values/timeseries?keys=' + actDailyKey +
+        '&startTs=' + startTs + '&endTs=' + todayStartMs +
+        '&limit=400&agg=NONE';
+
+    /* Request 2: today's partial via agg=SUM (today-window only, max ~960 readings) */
+    var aTodayUrl = '/api/plugins/telemetry/' + entTypeStr + '/' + entIdStr +
         '/values/timeseries?keys=' + actKey +
-        '&startTs=' + startTs + '&endTs=' + Date.now() +
-        '&limit=100000&agg=NONE';
+        '&startTs=' + todayStartMs + '&endTs=' + nowMs +
+        '&limit=1&agg=SUM&interval=' + DAY_MS;
 
     try {
         self.ctx.http.get(pUrl).subscribe(function (pData) {
-            self.ctx.http.get(aActUrl).subscribe(
-                function (aData) {
-                    processMonthlyData(pData, aData, actKey, p50MKey, p90MKey, p95MKey, pvlibKey, s, year);
-                },
-                function () {
-                    processMonthlyData(pData, {}, actKey, p50MKey, p90MKey, p95MKey, pvlibKey, s, year);
-                }
-            );
+            self.ctx.http.get(aDailyUrl).subscribe(function (aDailyData) {
+                self.ctx.http.get(aTodayUrl).subscribe(
+                    function (aTodayData) {
+                        processMonthlyData(pData, aDailyData, aTodayData, actDailyKey, actKey,
+                                           p50MKey, p90MKey, p95MKey, pvlibKey, s, year);
+                    },
+                    function () {
+                        processMonthlyData(pData, aDailyData, {}, actDailyKey, actKey,
+                                           p50MKey, p90MKey, p95MKey, pvlibKey, s, year);
+                    }
+                );
+            }, function () {
+                /* No pre-computed key — degrade: agg=SUM for whole year (old behaviour) */
+                var aFallbackUrl = '/api/plugins/telemetry/' + entTypeStr + '/' + entIdStr +
+                    '/values/timeseries?keys=' + actKey +
+                    '&startTs=' + startTs + '&endTs=' + nowMs +
+                    '&limit=400&agg=SUM&interval=' + DAY_MS;
+                self.ctx.http.get(aFallbackUrl).subscribe(
+                    function (aFbData) {
+                        processMonthlyData(pData, null, aFbData, null, actKey,
+                                           p50MKey, p90MKey, p95MKey, pvlibKey, s, year);
+                    },
+                    function () {
+                        processMonthlyData(pData, {}, {}, actDailyKey, actKey,
+                                           p50MKey, p90MKey, p95MKey, pvlibKey, s, year);
+                    }
+                );
+            });
         }, function () {
             tryAttributeFallback(entIdStr, entTypeStr, s);
         });
@@ -395,11 +437,12 @@ function fetchMonthlyData(entIdStr, entTypeStr, s) {
 }
 
 /* ────────── MONTHLY DATA PROCESSING ────────── */
-function processMonthlyData(pData, aData, actKey, p50MKey, p90MKey, p95MKey, pvlibKey, s, year) {
+function processMonthlyData(pData, aDailyData, aTodayData, actDailyKey, actKey,
+                             p50MKey, p90MKey, p95MKey, pvlibKey, s, year) {
     dataMode = 'monthly';
     updateStatusBadge();
 
-    var unit = s.unitLabel || 'MWh';
+    var unit        = s.unitLabel || 'MWh';
     var MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
     /* Parse P-value monthly rows → map by month index (0-11) */
@@ -415,16 +458,40 @@ function processMonthlyData(pData, aData, actKey, p50MKey, p90MKey, p95MKey, pvl
     var p90Map  = pRowsToMonthMap(pData[p90MKey]);
     var p95Map  = pRowsToMonthMap(pData[p95MKey]);
 
-    /* Aggregate actual (active_power kW, 1-min cadence) → monthly MWh
-       kWh per point = kW × (1/60). Sum per month → /1000 → MWh. */
+    /* Build monthly actual MWh map.
+       Mode A (normal): aDailyData has actual_daily_energy_kwh rows (kWh, 1 row/day).
+       Mode B (fallback): aDailyData is null, aTodayData has agg=SUM rows for full year.
+    */
     var actMonthlyMwh = {};
-    var actRows = aData[actKey] || [];
-    actRows.forEach(function (r) {
-        var v = parseFloat(r.value);
-        if (isNaN(v) || v < 0) return;
-        var mo = new Date(parseInt(r.ts)).getMonth();
-        actMonthlyMwh[mo] = (actMonthlyMwh[mo] || 0) + v / 60.0 / 1000.0;
-    });
+
+    if (actDailyKey && aDailyData && aDailyData[actDailyKey]) {
+        /* Mode A: pre-computed daily kWh → sum by month → MWh */
+        (aDailyData[actDailyKey] || []).forEach(function (r) {
+            var v = parseFloat(r.value);
+            if (isNaN(v) || v <= 0) return;
+            var mo = new Date(parseInt(r.ts)).getMonth();
+            actMonthlyMwh[mo] = (actMonthlyMwh[mo] || 0) + (v / 1000.0);  // kWh → MWh
+        });
+        /* Add today's partial: aTodayData has agg=SUM row → /60 = kWh → /1000 = MWh */
+        var todayRows = aTodayData && aTodayData[actKey] ? aTodayData[actKey] : [];
+        if (todayRows.length > 0) {
+            var todayKwMin = parseFloat(todayRows[0].value);
+            if (!isNaN(todayKwMin) && todayKwMin > 0) {
+                var todayMo = new Date().getMonth();
+                var todayMwh = todayKwMin / 60.0 / 1000.0;  // kW-min → kWh → MWh
+                actMonthlyMwh[todayMo] = (actMonthlyMwh[todayMo] || 0) + todayMwh;
+            }
+        }
+    } else {
+        /* Mode B fallback: aTodayData is actually full-year agg=SUM daily rows */
+        var fbRows = aTodayData && aTodayData[actKey] ? aTodayData[actKey] : [];
+        fbRows.forEach(function (r) {
+            var v = parseFloat(r.value);
+            if (isNaN(v) || v <= 0) return;
+            var mo = new Date(parseInt(r.ts)).getMonth();
+            actMonthlyMwh[mo] = (actMonthlyMwh[mo] || 0) + (v / 60.0 / 1000.0);  // kW-min → MWh
+        });
+    }
 
     /* Aggregate pvlib expected daily kWh → monthly MWh (fallback actual line) */
     var pvlibMonthlyMwh = {};
