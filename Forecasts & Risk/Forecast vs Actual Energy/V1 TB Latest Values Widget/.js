@@ -338,7 +338,7 @@ function fetchLiveData() {
     if (!entIdStr || !entTypeStr) { renderNoData(); return; }
 
     /* Dispatch on viewMode */
-    var viewMode = (s.viewMode || 'monthly').toLowerCase();
+    var viewMode = (s.viewMode || 'ytd_weekly').toLowerCase();
     if (viewMode === 'monthly') {
         fetchMonthlyData(entIdStr, entTypeStr, s);
     } else if (viewMode === 'ytd_weekly') {
@@ -550,24 +550,48 @@ function fetchYtdWeeklyData(entIdStr, entTypeStr, s) {
     var p90Key = 'forecast_p90_weekly';
     var p95Key = 'forecast_p95_weekly';
     var actKey = 'actual_weekly_energy_kwh';
+    var pvlibKey = s.pvlibExpectedKey || 'total_generation_expected_kwh';
 
+    /* Fetch weekly P-values + actual weekly energy + pvlib daily (for weekly aggregation) */
     var url = '/api/plugins/telemetry/' + entTypeStr + '/' + entIdStr +
-        '/values/timeseries?keys=' + [p50Key, p90Key, p95Key, actKey].join(',') +
+        '/values/timeseries?keys=' + [p50Key, p90Key, p95Key, actKey, pvlibKey].join(',') +
         '&startTs=' + startTs + '&endTs=' + endTs +
-        '&limit=100&agg=NONE';
+        '&limit=500&agg=NONE';
+
+    /* Also fetch today's partial actual via active_power agg=SUM */
+    var actRtKey    = s.actualEnergyKey || 'active_power';
+    var DAY_MS      = 86400000;
+    var nowMs       = Date.now();
+    var offsetMs    = 330 * 60 * 1000;
+    var nowLocal    = new Date(nowMs + offsetMs);
+    var todayStartLocal = new Date(Date.UTC(nowLocal.getUTCFullYear(), nowLocal.getUTCMonth(), nowLocal.getUTCDate()));
+    var todayStartMs    = todayStartLocal.getTime() - offsetMs;
+
+    var aTodayUrl = '/api/plugins/telemetry/' + entTypeStr + '/' + entIdStr +
+        '/values/timeseries?keys=' + actRtKey +
+        '&startTs=' + todayStartMs + '&endTs=' + nowMs +
+        '&limit=1&agg=SUM&interval=' + DAY_MS;
 
     try {
         self.ctx.http.get(url).subscribe(function (data) {
-            processYtdWeeklyData(data, actKey, p50Key, p90Key, p95Key, s, year);
+            self.ctx.http.get(aTodayUrl).subscribe(
+                function (aTodayData) {
+                    processYtdWeeklyData(data, actKey, p50Key, p90Key, p95Key, pvlibKey, actRtKey, aTodayData, s, year);
+                },
+                function () {
+                    processYtdWeeklyData(data, actKey, p50Key, p90Key, p95Key, pvlibKey, actRtKey, {}, s, year);
+                }
+            );
         }, function () { tryAttributeFallback(entIdStr, entTypeStr, s); });
     } catch (e) { tryAttributeFallback(entIdStr, entTypeStr, s); }
 }
 
-function processYtdWeeklyData(data, actKey, p50Key, p90Key, p95Key, s, year) {
+function processYtdWeeklyData(data, actKey, p50Key, p90Key, p95Key, pvlibKey, actRtKey, aTodayData, s, year) {
     dataMode = 'ytd_weekly';
     updateStatusBadge();
 
     var unit = s.unitLabel || 'MWh';
+    var MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
     function pRowsToWeeklyMap(rows) {
         var map = {};
@@ -584,7 +608,8 @@ function processYtdWeeklyData(data, actKey, p50Key, p90Key, p95Key, s, year) {
     var p50Map = pRowsToWeeklyMap(data[p50Key]);
     var p90Map = pRowsToWeeklyMap(data[p90Key]);
     var p95Map = pRowsToWeeklyMap(data[p95Key]);
-    
+
+    /* Actual weekly energy (kWh → MWh) */
     var actMap = {};
     (data[actKey] || []).forEach(function(r) {
         var d = new Date(parseInt(r.ts));
@@ -595,24 +620,67 @@ function processYtdWeeklyData(data, actKey, p50Key, p90Key, p95Key, s, year) {
         if(!isNaN(v) && v >= 0) actMap[w] = v / 1000.0;
     });
 
+    /* Add today's partial to current week bucket */
+    var todayRows = aTodayData && aTodayData[actRtKey] ? aTodayData[actRtKey] : [];
+    if (todayRows.length > 0) {
+        var todayKwMin = parseFloat(todayRows[0].value);
+        if (!isNaN(todayKwMin) && todayKwMin > 0) {
+            var todayDoyNow = getDayOfYear(new Date());
+            var todayWeek = Math.floor(todayDoyNow / 7);
+            if (todayWeek > 51) todayWeek = 51;
+            var todayMwh = todayKwMin / 60.0 / 1000.0;  /* kW-min → kWh → MWh */
+            actMap[todayWeek] = (actMap[todayWeek] || 0) + todayMwh;
+        }
+    }
+
+    /* Aggregate pvlib daily kWh → weekly MWh */
+    var pvlibWeeklyMwh = {};
+    (data[pvlibKey] || []).forEach(function (r) {
+        var d = new Date(parseInt(r.ts));
+        if (d.getFullYear() !== year) return;
+        var v = parseFloat(r.value);
+        if (isNaN(v) || v < 0) return;
+        var w = Math.floor(getDayOfYear(d) / 7);
+        if (w > 51) w = 51;
+        pvlibWeeklyMwh[w] = (pvlibWeeklyMwh[w] || 0) + v / 1000.0; /* kWh→MWh */
+    });
+
     var labels = [], dataP50 = [], dataP90 = [], dataP95 = [], dataBand = [], dataActual = [], dataPvlib = [];
     var todayDoy = getDayOfYear(new Date());
     var currentWeek = Math.floor(todayDoy / 7);
     if (currentWeek > 51) currentWeek = 51;
 
+    /* Build month-boundary labels: show month name on the first week of each month,
+       empty string otherwise. Gives 12 clean month markers on a 52-point chart. */
+    var jan1 = new Date(year, 0, 1);
+    var prevMonth = -1;
+
     for (var w = 0; w < 52; w++) {
-        labels.push('W' + (w + 1));
-        
+        /* Week's midpoint date → determines which month this week belongs to */
+        var weekMidDate = new Date(jan1.getTime() + (w * 7 + 3) * 86400000);
+        var weekMonth = weekMidDate.getMonth();
+
+        if (weekMonth !== prevMonth) {
+            labels.push(MONTH_NAMES[weekMonth]);
+            prevMonth = weekMonth;
+        } else {
+            labels.push('');
+        }
+
         dataP50.push(p50Map[w] != null ? round(p50Map[w], 2) : null);
         dataP90.push(p90Map[w] != null ? round(p90Map[w], 2) : null);
         dataP95.push(p95Map[w] != null ? round(p95Map[w], 2) : null);
         dataBand.push(p50Map[w] != null ? round(p50Map[w], 2) : null);
-        
+
         if (w <= currentWeek) {
             dataActual.push(actMap[w] != null ? round(actMap[w], 2) : null);
         } else {
             dataActual.push(null);
         }
+
+        /* pvlib expected line (past+current weeks) */
+        var pvMwh = pvlibWeeklyMwh[w];
+        dataPvlib.push(w <= currentWeek && pvMwh > 0 ? round(pvMwh, 2) : null);
     }
 
     renderChart(labels, dataP50, dataP90, dataP95, dataBand, dataActual, dataPvlib);
@@ -1136,8 +1204,11 @@ function updateStatusBadge() {
     switch (dataMode) {
         case 'live':
         case 'monthly':
+        case 'ytd_weekly':
+        case 'mtd_daily':
             $statusDot.addClass('good');
-            $statusText.text(dataMode === 'monthly' ? 'MONTHLY' : 'LIVE');
+            var modeLabels = {'monthly': 'MONTHLY', 'ytd_weekly': 'YTD WEEKLY', 'mtd_daily': 'MTD DAILY', 'live': 'LIVE'};
+            $statusText.text(modeLabels[dataMode] || 'LIVE');
             break;
         case 'derived':
             $statusDot.addClass('derived');

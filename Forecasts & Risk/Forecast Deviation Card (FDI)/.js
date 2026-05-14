@@ -160,13 +160,17 @@ function fetchMtdData() {
                 // forecast_p50_mtd is in MWh, convert to kWh
                 var fcKwh = parseFloat(fcRows[0].value) * 1000;
                 
-                // actual_mtd_energy_kwh is in kWh
-                var actKwh = actRows.length > 0 ? parseFloat(actRows[0].value) : 0;
-
                 if (isNaN(fcKwh) || fcKwh <= 0) { showPlaceholder(); return; }
 
                 var unit = s.unitLabel || 'MWh';
                 var displayForecast = unit === 'MWh' ? fcKwh / 1000 : fcKwh;
+
+                if (actRows.length === 0) {
+                    applyDeviation(0, 0, displayForecast, 'mtd');
+                    return;
+                }
+
+                var actKwh = parseFloat(actRows[0].value);
                 var displayActual = unit === 'MWh' ? actKwh / 1000 : actKwh;
                 
                 var fdiPct = ((actKwh - fcKwh) / fcKwh) * 100;

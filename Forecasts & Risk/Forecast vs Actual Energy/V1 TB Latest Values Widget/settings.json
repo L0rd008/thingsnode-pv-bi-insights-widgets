@@ -10,8 +10,8 @@
         "id": "viewMode",
         "name": "View Mode",
         "type": "text",
-        "default": "monthly",
-        "helpText": "'monthly' = 12 monthly bars, 'ytd_weekly' = 52 weekly buckets for current year, 'mtd_daily' = daily points for current month, 'daily' = rolling windowDays."
+        "default": "ytd_weekly",
+        "helpText": "'ytd_weekly' (default) = YTD with 7-day resolution and month labels on x-axis, 'monthly' = 12 monthly bars, 'mtd_daily' = daily points for current month, 'daily' = rolling windowDays."
     },
     {
         "id": "unitLabel",
