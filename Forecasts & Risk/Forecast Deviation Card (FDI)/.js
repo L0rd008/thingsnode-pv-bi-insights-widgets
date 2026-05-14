@@ -133,77 +133,44 @@ function fetchMtdData() {
         var entTypeStr = (typeof entityType === 'string')  ? entityType          : entityId.entityType;
         if (!entIdStr) { showPlaceholder(); return; }
 
-        /* Compute month-start in Asia/Colombo (UTC+5:30 = +330 min).
-           Browser clock may be in a different timezone — apply explicit offset so
-           monthStart aligns with the plant's local midnight (where pvalue_job stamps rows). */
-        var offsetMs = 330 * 60 * 1000;   // +5:30 in ms
+        var offsetMs = 330 * 60 * 1000;
         var nowUtcMs  = Date.now();
-        var nowLocal  = new Date(nowUtcMs + offsetMs);  // "fake" local date in Colombo
-        var monthStartLocal = new Date(
-            Date.UTC(nowLocal.getUTCFullYear(), nowLocal.getUTCMonth(), 1)
-        );  // 1st of current month at 00:00 UTC
-        var monthStartMs = monthStartLocal.getTime() - offsetMs;  // back to true UTC ms = Colombo 00:00
+        var nowLocal  = new Date(nowUtcMs + offsetMs);
+        var monthStartLocal = new Date(Date.UTC(nowLocal.getUTCFullYear(), nowLocal.getUTCMonth(), 1));
+        var monthStartMs = monthStartLocal.getTime() - offsetMs;
         var endTs = nowUtcMs;
 
-        /* Generic: use forecastDailyKey setting (can be P50, P90, or P95 key per instance) */
-        var fcKey  = s.forecastDailyKey  || s.forecastP50DailyKey || 'forecast_p50_daily';
-        var actKey = s.actualEnergyKey   || 'active_power';
+        var fcKey  = s.forecastMtdKey || 'forecast_p50_mtd';
+        var actKey = s.actualMtdKey   || 'actual_mtd_energy_kwh';
 
-        /* Request 1: P-value daily rows for the month (agg=NONE, max 31 rows) */
-        var fcUrl = '/api/plugins/telemetry/' + entTypeStr + '/' + entIdStr +
-            '/values/timeseries?keys=' + fcKey +
+        var url = '/api/plugins/telemetry/' + entTypeStr + '/' + entIdStr +
+            '/values/timeseries?keys=' + fcKey + ',' + actKey +
             '&startTs=' + monthStartMs + '&endTs=' + endTs +
-            '&limit=35&agg=NONE&orderBy=ASC';
+            '&limit=1&agg=NONE&orderBy=DESC';
 
-        /* Request 2: actual generation MTD (agg=SUM over full MTD period = 1 row).
-           active_power in kW at ~1-min cadence.
-           TB SUM = sum of all kW readings since month start.
-           Conversion: sum / 60 = kWh ; / 1000 = MWh. */
-        var mtdInterval = Math.max(endTs - monthStartMs, 60000);  // at least 1 min
-        var actUrl = '/api/plugins/telemetry/' + entTypeStr + '/' + entIdStr +
-            '/values/timeseries?keys=' + actKey +
-            '&startTs=' + monthStartMs + '&endTs=' + endTs +
-            '&limit=1&agg=SUM&interval=' + mtdInterval;
-
-        self.ctx.http.get(fcUrl).subscribe(
-            function (fcData) {
-                var fcRows = fcData[fcKey] || [];
+        self.ctx.http.get(url).subscribe(
+            function (data) {
+                var fcRows = data[fcKey] || [];
+                var actRows = data[actKey] || [];
 
                 if (fcRows.length === 0) {
                     showPlaceholder(); return;
                 }
 
-                /* Sum forecast rows (MWh) → kWh */
-                var sumFcKwh = 0;
-                for (var i = 0; i < fcRows.length; i++) {
-                    var v = parseFloat(fcRows[i].value);
-                    if (!isNaN(v) && v > 0) sumFcKwh += v * 1000;
-                }
-                if (sumFcKwh <= 0) { showPlaceholder(); return; }
+                // forecast_p50_mtd is in MWh, convert to kWh
+                var fcKwh = parseFloat(fcRows[0].value) * 1000;
+                
+                // actual_mtd_energy_kwh is in kWh
+                var actKwh = actRows.length > 0 ? parseFloat(actRows[0].value) : 0;
+
+                if (isNaN(fcKwh) || fcKwh <= 0) { showPlaceholder(); return; }
 
                 var unit = s.unitLabel || 'MWh';
-                var displayForecast = unit === 'MWh' ? sumFcKwh / 1000 : sumFcKwh;
-
-                /* Fetch actual (active_power SUM) */
-                self.ctx.http.get(actUrl).subscribe(
-                    function (actData) {
-                        var actRows = actData[actKey] || [];
-                        if (actRows.length === 0) {
-                            /* No meter data yet (day 1 or night) — FDI = 0%, show forecast */
-                            applyDeviation(0, 0, displayForecast, 'mtd');
-                            return;
-                        }
-                        /* actRows[0].value = sum(kW over MTD) → /60 = kWh → /1000 = MWh */
-                        var sumActKwh = parseFloat(actRows[0].value) / 60.0;
-                        var displayActual = unit === 'MWh' ? sumActKwh / 1000 : sumActKwh;
-                        var fdiPct = ((sumActKwh - sumFcKwh) / sumFcKwh) * 100;
-                        applyDeviation(fdiPct, displayActual, displayForecast, 'mtd');
-                    },
-                    function () {
-                        /* Actual fetch failed — show forecast, FDI = 0% */
-                        applyDeviation(0, 0, displayForecast, 'mtd');
-                    }
-                );
+                var displayForecast = unit === 'MWh' ? fcKwh / 1000 : fcKwh;
+                var displayActual = unit === 'MWh' ? actKwh / 1000 : actKwh;
+                
+                var fdiPct = ((actKwh - fcKwh) / fcKwh) * 100;
+                applyDeviation(fdiPct, displayActual, displayForecast, 'mtd');
             },
             function () { showPlaceholder(); }
         );

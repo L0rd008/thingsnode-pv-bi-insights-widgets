@@ -14,11 +14,11 @@
         "helpText": "'mtd' = month-to-date cumulative forecast vs actual (recommended). 'live' = latest-value DS[0]/DS[1] ratio. 'derived' = single-value vs annual P/365."
     },
     {
-        "id": "forecastDailyKey",
-        "name": "Forecast Daily Key (P50 / P90 / P95)",
+        "id": "forecastMtdKey",
+        "name": "Forecast MTD Key (P50 / P90 / P95)",
         "type": "text",
-        "default": "forecast_p50_daily",
-        "helpText": "The P-value key this instance compares against. Set to 'forecast_p50_daily', 'forecast_p90_daily', or 'forecast_p95_daily' to create 3 separate dashboard instances."
+        "default": "forecast_p50_mtd",
+        "helpText": "Set to 'forecast_p50_mtd', 'forecast_p90_mtd', or 'forecast_p95_mtd' per instance."
     },
     {
         "id": "actualEnergyKey",

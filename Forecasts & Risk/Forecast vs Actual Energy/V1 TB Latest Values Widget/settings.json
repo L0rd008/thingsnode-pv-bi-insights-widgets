@@ -11,7 +11,7 @@
         "name": "View Mode",
         "type": "text",
         "default": "monthly",
-        "helpText": "'monthly' = full calendar year, 12 monthly bars + P50/P90/P95 lines including future months (recommended). 'daily' = rolling windowDays view with daily granularity."
+        "helpText": "'monthly' = 12 monthly bars, 'ytd_weekly' = 52 weekly buckets for current year, 'mtd_daily' = daily points for current month, 'daily' = rolling windowDays."
     },
     {
         "id": "unitLabel",
