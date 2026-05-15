@@ -41,3 +41,5 @@ Portfolio/demo_device_portfolio.csv
 ESG & Carbon/ESG_Widget_Tests.html
 ESG & Carbon/ESG_Widget_Tests_v3.js
 **/Screenshot *.png
+
+node_modules/
