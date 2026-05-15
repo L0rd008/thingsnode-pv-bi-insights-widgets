@@ -407,6 +407,16 @@ function fetchMonthlyData(entIdStr, entTypeStr, s) {
 
     try {
         self.ctx.http.get(pUrl).subscribe(function (pData) {
+            /* Gate: if no forecast_p*_monthly rows exist for the current year,
+               fall through to derived mode rather than rendering empty P-bands. */
+            var hasPvalues = (pData[p50MKey] || []).some(function (r) {
+                return new Date(parseInt(r.ts)).getFullYear() === year;
+            });
+            if (!hasPvalues) {
+                tryAttributeFallback(entIdStr, entTypeStr, s);
+                return;
+            }
+
             self.ctx.http.get(aDailyUrl).subscribe(function (aDailyData) {
                 self.ctx.http.get(aTodayUrl).subscribe(
                     function (aTodayData) {
@@ -574,6 +584,16 @@ function fetchYtdWeeklyData(entIdStr, entTypeStr, s) {
 
     try {
         self.ctx.http.get(url).subscribe(function (data) {
+            /* Gate: if no forecast_p*_weekly rows exist for the current year,
+               fall through to derived mode rather than rendering empty P-bands. */
+            var hasPvalues = (data[p50Key] || []).some(function (r) {
+                return new Date(parseInt(r.ts)).getFullYear() === year;
+            });
+            if (!hasPvalues) {
+                tryAttributeFallback(entIdStr, entTypeStr, s);
+                return;
+            }
+
             self.ctx.http.get(aTodayUrl).subscribe(
                 function (aTodayData) {
                     processYtdWeeklyData(data, actKey, p50Key, p90Key, p95Key, pvlibKey, actRtKey, aTodayData, s, year);
@@ -727,6 +747,17 @@ function fetchMtdDailyData(entIdStr, entTypeStr, s) {
 
     try {
         self.ctx.http.get(pUrl).subscribe(function (pData) {
+            /* Gate: if no forecast_p*_daily rows exist for the current month,
+               fall through to derived mode rather than rendering empty P-bands. */
+            var hasPvalues = (pData[p50Key] || []).some(function (r) {
+                var d = new Date(parseInt(r.ts));
+                return d.getFullYear() === year && d.getMonth() === month;
+            });
+            if (!hasPvalues) {
+                tryAttributeFallback(entIdStr, entTypeStr, s);
+                return;
+            }
+
             self.ctx.http.get(aDailyUrl).subscribe(function (aDailyData) {
                 self.ctx.http.get(aTodayUrl).subscribe(
                     function (aTodayData) { processMtdDailyData(pData, aDailyData, aTodayData, actDailyKey, actKey, p50Key, p90Key, p95Key, pvlibKey, s, year, month); },
