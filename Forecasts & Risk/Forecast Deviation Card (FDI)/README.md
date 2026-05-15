@@ -113,7 +113,8 @@ All P-value daily forecast telemetry is written by **`pvalue_job.py`** (pvalue-d
 | `fdiMode` | `"mtd"` | `"mtd"` / `"live"` / `"derived"` |
 | `forecastDailyKey` | `forecast_p50_daily` | **Primary**: set to P50/P90/P95 key per instance |
 | `forecastP50DailyKey` | `forecast_p50_daily` | Legacy fallback if `forecastDailyKey` not set |
-| `actualDailyKey` | `total_generation` | **Real meter** daily energy (kWh). NOT pvlib expected. |
+| `actualDailyKey` | `actual_daily_energy_kwh` | Pre-computed daily kWh from `daily_job.py`. Override to a real meter key if available. |
+| `actualPartialKey` | `active_power` | Realtime kW key for today's partial via agg=SUM (result ÷ 60 = kWh). |
 | `forecastKey` | `forecast_p50_daily` | Forecast key for live mode DS[0] |
 | `actualKey` | `total_generation` | Actual key for live mode DS[1] |
 | `p50AttributeKey` | `p50_energy` | Annual P50 attribute for derived mode |
@@ -170,3 +171,14 @@ P90 instance:  Σ P90 = 11 × 60.28 = 663.1 MWh = 663,080 kWh
 P95 instance:  Σ P95 = 11 × 57.11 = 628.2 MWh = 628,210 kWh
                FDI_P95 = (658200 − 628210) / 628210 × 100 = +4.8%  →  WELL ABOVE P95 ✓
 ```
+
+---
+
+## 9) v4.0 migration note
+
+If you have an existing FDI instance configured against v2.x:
+
+1. Set `forecastDailyKey` to `forecast_p50_daily` (or `forecast_p90_daily` / `forecast_p95_daily` per instance).
+2. Set `actualDailyKey` to `actual_daily_energy_kwh` (or a real meter daily kWh key if available).
+3. The legacy `forecastMtdKey` and `actualEnergyKey` settings are now ignored — they remain in `settings.json` for 90 days so existing dashboard configurations do not error on load, but they have no effect on widget behaviour.
+4. No data is lost. The `forecast_p*_mtd` telemetry keys continue to exist in ThingsBoard and will be retired after the 90-day deprecation window (re-evaluate in plan v2).

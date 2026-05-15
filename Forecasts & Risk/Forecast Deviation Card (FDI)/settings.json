@@ -14,18 +14,39 @@
         "helpText": "'mtd' = month-to-date cumulative forecast vs actual (recommended). 'live' = latest-value DS[0]/DS[1] ratio. 'derived' = single-value vs annual P/365."
     },
     {
+        "id": "forecastDailyKey",
+        "name": "Forecast Daily Key (P50 / P90 / P95)",
+        "type": "text",
+        "default": "forecast_p50_daily",
+        "helpText": "Primary (v4.0): daily P-value key written by pvalue_job. Set per instance: forecast_p50_daily / forecast_p90_daily / forecast_p95_daily. Unit: MWh/day."
+    },
+    {
+        "id": "actualDailyKey",
+        "name": "Actual Daily Energy Key",
+        "type": "text",
+        "default": "actual_daily_energy_kwh",
+        "helpText": "Pre-computed daily kWh written by daily_job.py (00:05 local for prior day). Override to a real meter key if available. Unit: kWh/day."
+    },
+    {
+        "id": "actualPartialKey",
+        "name": "Realtime Partial Key (today)",
+        "type": "text",
+        "default": "active_power",
+        "helpText": "Realtime kW key used to integrate today's partial generation via agg=SUM. Result divided by 60 to convert kW-min to kWh. Default: active_power."
+    },
+    {
         "id": "forecastMtdKey",
-        "name": "Forecast MTD Key (P50 / P90 / P95)",
+        "name": "Forecast MTD Key (legacy — ignored in v4.0)",
         "type": "text",
         "default": "forecast_p50_mtd",
-        "helpText": "Set to 'forecast_p50_mtd', 'forecast_p90_mtd', or 'forecast_p95_mtd' per instance."
+        "helpText": "(legacy — ignored in v4.0) Previously used forecast_p*_mtd precomputed key. No longer read. Retained for 90-day upgrade window so existing dashboard configs do not error on load."
     },
     {
         "id": "actualEnergyKey",
-        "name": "Actual Power/Energy Key",
+        "name": "Actual Power/Energy Key (legacy — ignored in v4.0)",
         "type": "text",
         "default": "active_power",
-        "helpText": "Realtime kW key (e.g. 'active_power'). Widget fetches MTD sum via agg=SUM → divides by 60 → MWh. No total_generation key needed."
+        "helpText": "(legacy — ignored in v4.0) Previously used as realtime kW key for MTD agg=SUM. Replaced by actualPartialKey. Retained for 90-day upgrade window."
     },
     {
         "id": "footerText",

@@ -1,8 +1,12 @@
 // ════════════════════════════════════════════════════
-// Forecast Deviation Card (FDI) — v2.2
+// Forecast Deviation Card (FDI) — v4.0
 // ThingsBoard v4.3.0 PE | Latest Values
 // 3-tier: Live → Derived → Manual Simulation
 // Compact horizontal layout — no gauge
+// v4.0: client-side MTD summation of daily rows.
+//   forecastDailyKey rows + actualDailyKey rows + today partial.
+//   Eliminates v2.x endpoint-alignment bias (forecast_p*_mtd
+//   was today-stamped; actual_mtd_energy_kwh was yesterday-stamped).
 // ════════════════════════════════════════════════════
 
 var $el, s;
@@ -119,66 +123,165 @@ self.onDataUpdated = function () {
 };
 
 // ──────────────────────────────────────────────────
-//  MTD mode: fetch daily timeseries for current month
+//  MTD mode: fetch daily timeseries for current month (v4.0)
+//
+//  Three REST calls (sequential chaining):
+//    1. forecastDailyKey  — daily MWh rows, month-start → now
+//    2. actualDailyKey    — daily kWh rows, month-start → today-start
+//    3. actualPartialKey  — today's partial via agg=SUM, kW-min → /60 = kWh
+//
+//  All three are summed client-side.
+//  Sentinel rule: filter value < 0 before summing (service writes -1 on error).
 // ──────────────────────────────────────────────────
 function fetchMtdData() {
     try {
         if (!self.ctx.datasources || self.ctx.datasources.length === 0) {
             showPlaceholder(); return;
         }
-        var ds = self.ctx.datasources[0];
+        var ds         = self.ctx.datasources[0];
         var entityId   = ds.entityId;
         var entityType = ds.entityType;
-        var entIdStr   = (typeof entityId   === 'object') ? entityId.id         : entityId;
-        var entTypeStr = (typeof entityType === 'string')  ? entityType          : entityId.entityType;
+        var entIdStr   = (typeof entityId   === 'object') ? entityId.id        : entityId;
+        var entTypeStr = (typeof entityType === 'string')  ? entityType         : entityId.entityType;
         if (!entIdStr) { showPlaceholder(); return; }
 
-        var offsetMs = 330 * 60 * 1000;
-        var nowUtcMs  = Date.now();
-        var nowLocal  = new Date(nowUtcMs + offsetMs);
+        // Asia/Colombo UTC+5:30 — explicit offset, never derived from host clock
+        var offsetMs        = 330 * 60 * 1000;
+        var nowUtcMs        = Date.now();
+        var nowLocal        = new Date(nowUtcMs + offsetMs);
+
+        // Month start: 1st of current month, 00:00 Colombo
         var monthStartLocal = new Date(Date.UTC(nowLocal.getUTCFullYear(), nowLocal.getUTCMonth(), 1));
-        var monthStartMs = monthStartLocal.getTime() - offsetMs;
-        var endTs = nowUtcMs;
+        var monthStartMs    = monthStartLocal.getTime() - offsetMs;
 
-        var fcKey  = s.forecastMtdKey || 'forecast_p50_mtd';
-        var actKey = s.actualMtdKey   || 'actual_mtd_energy_kwh';
+        // Today start: current day 00:00 Colombo
+        var todayStartLocal = new Date(Date.UTC(nowLocal.getUTCFullYear(), nowLocal.getUTCMonth(), nowLocal.getUTCDate()));
+        var todayStartMs    = todayStartLocal.getTime() - offsetMs;
 
-        var url = '/api/plugins/telemetry/' + entTypeStr + '/' + entIdStr +
-            '/values/timeseries?keys=' + fcKey + ',' + actKey +
+        var endTs  = nowUtcMs;
+        var DAY_MS = 86400000;
+
+        // Settings: new primary keys with legacy fallback chain
+        var fcKey     = s.forecastDailyKey || s.forecastP50DailyKey || 'forecast_p50_daily';
+        var actDayKey = s.actualDailyKey   || 'actual_daily_energy_kwh';
+        var actRtKey  = s.actualPartialKey || 'active_power';
+
+        var base = '/api/plugins/telemetry/' + entTypeStr + '/' + entIdStr + '/values/timeseries?';
+
+        // Call 1: forecast daily rows — month-start to now (day-1..today, each row in MWh)
+        var fcUrl = base + 'keys=' + fcKey +
             '&startTs=' + monthStartMs + '&endTs=' + endTs +
-            '&limit=1&agg=NONE&orderBy=DESC';
+            '&limit=40&agg=NONE';
 
-        self.ctx.http.get(url).subscribe(
-            function (data) {
-                var fcRows = data[fcKey] || [];
-                var actRows = data[actKey] || [];
+        // Call 2: actual pre-computed daily rows — month-start to today-start (excludes today)
+        var actDayUrl = base + 'keys=' + actDayKey +
+            '&startTs=' + monthStartMs + '&endTs=' + todayStartMs +
+            '&limit=40&agg=NONE';
 
+        // Call 3: today's partial — realtime key agg=SUM over today's window only
+        var actTodayUrl = base + 'keys=' + actRtKey +
+            '&startTs=' + todayStartMs + '&endTs=' + endTs +
+            '&limit=1&agg=SUM&interval=' + DAY_MS;
+
+        self.ctx.http.get(fcUrl).subscribe(
+            function (fcData) {
+                var fcRows = fcData[fcKey] || [];
+
+                // No forecast rows for this month → fall to attribute-derived mode
                 if (fcRows.length === 0) {
-                    showPlaceholder(); return;
-                }
-
-                // forecast_p50_mtd is in MWh, convert to kWh
-                var fcKwh = parseFloat(fcRows[0].value) * 1000;
-                
-                if (isNaN(fcKwh) || fcKwh <= 0) { showPlaceholder(); return; }
-
-                var unit = s.unitLabel || 'MWh';
-                var displayForecast = unit === 'MWh' ? fcKwh / 1000 : fcKwh;
-
-                if (actRows.length === 0) {
-                    applyDeviation(0, 0, displayForecast, 'mtd');
+                    tryAttributeDerived(0, s);
                     return;
                 }
 
-                var actKwh = parseFloat(actRows[0].value);
-                var displayActual = unit === 'MWh' ? actKwh / 1000 : actKwh;
-                
-                var fdiPct = ((actKwh - fcKwh) / fcKwh) * 100;
-                applyDeviation(fdiPct, displayActual, displayForecast, 'mtd');
+                // Sum forecast daily MWh; skip sentinel rows (value < 0)
+                var fcMwh = 0;
+                for (var i = 0; i < fcRows.length; i++) {
+                    var fv = parseFloat(fcRows[i].value);
+                    if (!isNaN(fv) && fv >= 0) fcMwh += fv;
+                }
+                if (fcMwh <= 0) { showPlaceholder(); return; }
+
+                // Call 2: actual pre-computed daily
+                self.ctx.http.get(actDayUrl).subscribe(
+                    function (actDayData) {
+                        var actDayRows = actDayData[actDayKey] || [];
+
+                        // Sum actual daily kWh; skip sentinel rows (value < 0)
+                        var actDayKwh = 0;
+                        for (var j = 0; j < actDayRows.length; j++) {
+                            var av = parseFloat(actDayRows[j].value);
+                            if (!isNaN(av) && av >= 0) actDayKwh += av;
+                        }
+
+                        // Call 3: today's partial
+                        self.ctx.http.get(actTodayUrl).subscribe(
+                            function (actTodayData) {
+                                var todayRows = actTodayData[actRtKey] || [];
+                                var todayKwh  = 0;
+                                if (todayRows.length > 0) {
+                                    var tv = parseFloat(todayRows[0].value);
+                                    // agg=SUM on active_power (kW) × 1-min interval = kW-min → /60 = kWh
+                                    if (!isNaN(tv) && tv >= 0) todayKwh = tv / 60.0;
+                                }
+                                computeAndRender(fcMwh, actDayKwh, todayKwh, actDayRows.length);
+                            },
+                            function () {
+                                // Today partial failed — render with what we have
+                                computeAndRender(fcMwh, actDayKwh, 0, actDayRows.length);
+                            }
+                        );
+                    },
+                    function () {
+                        // Pre-computed daily failed — try today's partial only
+                        self.ctx.http.get(actTodayUrl).subscribe(
+                            function (actTodayData) {
+                                var todayRows = actTodayData[actRtKey] || [];
+                                var todayKwh  = 0;
+                                if (todayRows.length > 0) {
+                                    var tv = parseFloat(todayRows[0].value);
+                                    if (!isNaN(tv) && tv >= 0) todayKwh = tv / 60.0;
+                                }
+                                computeAndRender(fcMwh, 0, todayKwh, 0);
+                            },
+                            function () {
+                                computeAndRender(fcMwh, 0, 0, 0);
+                            }
+                        );
+                    }
+                );
             },
-            function () { showPlaceholder(); }
+            function () {
+                // Forecast fetch failed entirely → derived fallback
+                tryAttributeDerived(0, s);
+            }
         );
     } catch (e) { showPlaceholder(); }
+}
+
+// ──────────────────────────────────────────────────
+//  computeAndRender — called after all 3 REST calls resolve.
+//  fcMwh      : cumulative forecast MWh, days 1..today
+//  actDayKwh  : sum of pre-computed actual daily kWh, days 1..yesterday
+//  todayKwh   : today's partial kWh (active_power agg=SUM / 60)
+//  actDayCount: number of pre-computed daily rows returned (0 = day-1 grace)
+// ──────────────────────────────────────────────────
+function computeAndRender(fcMwh, actDayKwh, todayKwh, actDayCount) {
+    var actMwh = (actDayKwh + todayKwh) / 1000.0;
+    var unit   = s.unitLabel || 'MWh';
+
+    var displayForecast = unit === 'MWh' ? fcMwh  : fcMwh  * 1000;
+    var displayActual   = unit === 'MWh' ? actMwh : actMwh * 1000;
+
+    // Day-1 grace: daily_job has not yet written and no realtime partial either
+    if (actDayCount === 0 && todayKwh === 0) {
+        applyDeviation(0, 0, displayForecast, 'mtd');
+        return;
+    }
+
+    if (fcMwh <= 0) { showPlaceholder(); return; }
+
+    var fdiPct = ((actMwh - fcMwh) / fcMwh) * 100;
+    applyDeviation(fdiPct, displayActual, displayForecast, 'mtd');
 }
 
 // ──────────────────────────────────────────────────
